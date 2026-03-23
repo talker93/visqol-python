@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.3.5] - 2026-03-23
+
+### Added
+- **Type hints** on all public and internal APIs (`from __future__ import annotations`)
+- **`py.typed`** marker (PEP 561) — mypy / pyright can now type-check dependents
+- **CONTRIBUTING.md** with development setup, code style, and PR guidelines
+- Exported `SimilarityResult` and `AudioSignal` from top-level `visqol` package
+- `mypy` configuration in `pyproject.toml`
+
+### Improved
+- **Error handling**: friendly `ValueError` / `FileNotFoundError` / `TypeError` throughout:
+  - `VisqolApi.create()` now validates mode, search_window, and model_path
+  - `VisqolApi.measure()` checks file existence before processing
+  - `VisqolApi.measure_from_arrays()` validates array types, emptiness, and sample rate
+  - `AudioSignal` validates sample rate on construction
+  - `AnalysisWindow` validates sample_rate and overlap range
+  - CLI now catches exceptions and prints user-friendly error messages
+- `AnalysisWindow.apply_hann_window()` uses `ValueError` instead of bare `assert`
+
 ## [3.3.4] - 2026-03-23
 
 ### Improved

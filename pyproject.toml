@@ -56,7 +56,12 @@ version = {attr = "visqol.__version__"}
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
-visqol = ["model/*.txt"]
+visqol = ["model/*.txt", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+warn_return_any = true
+warn_unused_configs = true

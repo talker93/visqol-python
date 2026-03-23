@@ -7,7 +7,10 @@ These tests verify basic API functionality without requiring external testdata.
 import numpy as np
 import pytest
 
-from visqol import VisqolApi
+from visqol import VisqolApi, SimilarityResult, AudioSignal
+
+
+# ── API creation ──
 
 
 class TestApiCreation:
@@ -25,6 +28,69 @@ class TestApiCreation:
         """Default mode (no argument) should work as audio mode."""
         api = VisqolApi()
         api.create()
+
+    def test_create_case_insensitive(self):
+        api = VisqolApi()
+        api.create(mode="SPEECH")
+
+    def test_create_invalid_mode_raises(self):
+        api = VisqolApi()
+        with pytest.raises(ValueError, match="Invalid mode"):
+            api.create(mode="invalid")
+
+    def test_create_negative_search_window_raises(self):
+        api = VisqolApi()
+        with pytest.raises(ValueError, match="search_window"):
+            api.create(search_window=-1)
+
+    def test_create_missing_model_raises(self):
+        api = VisqolApi()
+        with pytest.raises(FileNotFoundError):
+            api.create(mode="audio", model_path="/nonexistent/model.txt")
+
+
+# ── Measure guards ──
+
+
+class TestMeasureGuards:
+    """Test that measure() raises helpful errors for bad inputs."""
+
+    def test_measure_before_create_raises(self):
+        api = VisqolApi()
+        with pytest.raises(RuntimeError, match="create"):
+            api.measure("a.wav", "b.wav")
+
+    def test_measure_nonexistent_ref_raises(self):
+        api = VisqolApi()
+        api.create(mode="speech")
+        with pytest.raises(FileNotFoundError, match="Reference"):
+            api.measure("/nonexistent/ref.wav", "/nonexistent/deg.wav")
+
+    def test_measure_from_arrays_before_create_raises(self):
+        api = VisqolApi()
+        with pytest.raises(RuntimeError, match="create"):
+            api.measure_from_arrays(np.zeros(100), np.zeros(100), 16000)
+
+    def test_measure_from_arrays_bad_type_raises(self):
+        api = VisqolApi()
+        api.create(mode="speech")
+        with pytest.raises(TypeError, match="numpy array"):
+            api.measure_from_arrays([1, 2, 3], np.zeros(100), 16000)  # type: ignore[arg-type]
+
+    def test_measure_from_arrays_empty_raises(self):
+        api = VisqolApi()
+        api.create(mode="speech")
+        with pytest.raises(ValueError, match="empty"):
+            api.measure_from_arrays(np.array([]), np.zeros(100), 16000)
+
+    def test_measure_from_arrays_bad_sr_raises(self):
+        api = VisqolApi()
+        api.create(mode="speech")
+        with pytest.raises(ValueError, match="sample_rate"):
+            api.measure_from_arrays(np.zeros(100), np.zeros(100), 0)
+
+
+# ── measure_from_arrays ──
 
 
 class TestMeasureFromArrays:
@@ -59,6 +125,9 @@ class TestMeasureFromArrays:
         )
 
 
+# ── Result fields ──
+
+
 class TestResultFields:
     """Test that SimilarityResult has all expected fields."""
 
@@ -78,6 +147,9 @@ class TestResultFields:
         assert hasattr(result, "patch_sims")
 
 
+# ── Package metadata ──
+
+
 class TestVersion:
     """Test package version is accessible."""
 
@@ -87,3 +159,10 @@ class TestVersion:
         assert isinstance(visqol.__version__, str)
         parts = visqol.__version__.split(".")
         assert len(parts) >= 2, "Version should have at least major.minor"
+
+    def test_public_exports(self):
+        """Package should export key classes."""
+        import visqol
+        assert hasattr(visqol, "VisqolApi")
+        assert hasattr(visqol, "SimilarityResult")
+        assert hasattr(visqol, "AudioSignal")

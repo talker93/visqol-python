@@ -13,8 +13,10 @@ Usage:
     print(f"MOS-LQO: {result.moslqo}")
 """
 
-__version__ = "3.3.4"
+__version__: str = "3.3.5"
 
 from visqol.api import VisqolApi
+from visqol.visqol_core import SimilarityResult
+from visqol.audio_utils import AudioSignal
 
-__all__ = ["VisqolApi"]
+__all__: list[str] = ["VisqolApi", "SimilarityResult", "AudioSignal"]

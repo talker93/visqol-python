@@ -8,8 +8,13 @@ Corresponds to C++ files:
   - signal_filter.cc
 """
 
+from __future__ import annotations
+
 import logging
+from typing import List, Optional, Tuple
+
 import numpy as np
+from numpy.typing import NDArray
 from scipy.signal import lfilter
 
 from visqol.analysis_window import AnalysisWindow
@@ -18,33 +23,41 @@ from visqol.audio_utils import AudioSignal
 logger = logging.getLogger(__name__)
 
 # Glasberg and Moore Parameters
-EAR_Q = 9.26449
-MIN_BW = 24.7
-ORDER = 1.0
+EAR_Q: float = 9.26449
+MIN_BW: float = 24.7
+ORDER: float = 1.0
 
 # Speech mode max frequency
-SPEECH_MODE_MAX_FREQ = 8000.0
+SPEECH_MODE_MAX_FREQ: float = 8000.0
 
 
 class ErbFiltersResult:
     """Result of ERB filter coefficient computation."""
 
-    def __init__(self, center_freqs: np.ndarray, filter_coeffs: np.ndarray):
+    __slots__ = ("center_freqs", "filter_coeffs")
+
+    def __init__(
+        self,
+        center_freqs: NDArray[np.float64],
+        filter_coeffs: NDArray[np.float64],
+    ) -> None:
         """
         Args:
-            center_freqs: Array of center frequencies (num_channels,).
-            filter_coeffs: Coefficient matrix (10, num_channels).
+            center_freqs: Array of center frequencies ``(num_channels,)``.
+            filter_coeffs: Coefficient matrix ``(10, num_channels)``.
                 Rows: A0, A11, A12, A13, A14, A2, B0, B1, B2, gain
         """
         self.center_freqs = center_freqs
         self.filter_coeffs = filter_coeffs
 
 
-def calc_center_freqs(low_freq: float, high_freq: float,
-                      num_channels: int) -> np.ndarray:
+def calc_center_freqs(
+    low_freq: float, high_freq: float, num_channels: int
+) -> NDArray[np.float64]:
     """
     Compute uniformly-spaced center frequencies on ERB scale.
-    Equivalent to Slaney's ERBSpace function.
+
+    Equivalent to Slaney's ``ERBSpace`` function.
 
     Args:
         low_freq: Lowest center frequency.
@@ -52,7 +65,7 @@ def calc_center_freqs(low_freq: float, high_freq: float,
         num_channels: Number of frequency channels.
 
     Returns:
-        Array of center frequencies (num_channels,).
+        Array of center frequencies ``(num_channels,)``.
     """
     a = -(EAR_Q * MIN_BW)
     b = -np.log(high_freq + EAR_Q * MIN_BW)
@@ -60,15 +73,20 @@ def calc_center_freqs(low_freq: float, high_freq: float,
     d = high_freq + EAR_Q * MIN_BW
     e = (b + c) / num_channels
 
-    cfs = a + np.exp(np.arange(1, num_channels + 1) * e) * d
+    cfs: NDArray[np.float64] = a + np.exp(np.arange(1, num_channels + 1) * e) * d
     return cfs
 
 
-def make_erb_filters(sample_rate: int, num_channels: int,
-                     low_freq: float, high_freq: float) -> ErbFiltersResult:
+def make_erb_filters(
+    sample_rate: int,
+    num_channels: int,
+    low_freq: float,
+    high_freq: float,
+) -> ErbFiltersResult:
     """
     Compute ERB gammatone filter coefficients.
-    Python port of EquivalentRectangularBandwidth::MakeFilters.
+
+    Python port of ``EquivalentRectangularBandwidth::MakeFilters``.
 
     Args:
         sample_rate: Sample rate in Hz.
@@ -77,17 +95,18 @@ def make_erb_filters(sample_rate: int, num_channels: int,
         high_freq: Highest center frequency.
 
     Returns:
-        ErbFiltersResult containing center freqs and filter coefficients.
+        :class:`ErbFiltersResult` containing center freqs and filter coefficients.
     """
     if high_freq > sample_rate / 2.0:
         logger.warning(
             "high_freq (%.1f) >= sample_rate/2 (%.1f), falling back to sample_rate/2",
-            high_freq, sample_rate / 2.0
+            high_freq,
+            sample_rate / 2.0,
         )
         high_freq = sample_rate / 2.0
 
     cf = calc_center_freqs(low_freq, high_freq, num_channels)
-    T = 1.0 / sample_rate
+    T: float = 1.0 / sample_rate
 
     # ERB bandwidth
     erb = ((cf / EAR_Q) ** ORDER + MIN_BW ** ORDER) ** (1.0 / ORDER)
@@ -126,18 +145,20 @@ def make_erb_filters(sample_rate: int, num_channels: int,
     x3 = x01 + x02 * (xCos - s2 * xSin)
     x4 = x01 + x02 * (xCos + s2 * xSin)
 
-    x5 = (-2.0 / np.exp(2.0 * B * T)
-          - 2.0 * xExp
-          + 2.0 * (1.0 + xExp) / np.exp(B * T))
+    x5 = (
+        -2.0 / np.exp(2.0 * B * T)
+        - 2.0 * xExp
+        + 2.0 * (1.0 + xExp) / np.exp(B * T)
+    )
 
     gain = np.abs(x1 * x2 * x3 * x4 / (x5 ** 4))
 
-    # Assemble coefficient matrix (10 rows x num_channels columns)
+    # Assemble coefficient matrix (10 rows × num_channels columns)
     A0 = np.full(num_channels, T)
     A2 = np.zeros(num_channels)
     B0 = np.ones(num_channels)
 
-    filter_coeffs = np.array([
+    filter_coeffs: NDArray[np.float64] = np.array([
         A0,          # 0: A0
         A11,         # 1: A11
         A12,         # 2: A12
@@ -153,22 +174,16 @@ def make_erb_filters(sample_rate: int, num_channels: int,
     return ErbFiltersResult(center_freqs=cf, filter_coeffs=filter_coeffs)
 
 
-def _iir_filter(b: np.ndarray, a: np.ndarray, signal: np.ndarray,
-                zi: np.ndarray) -> tuple:
+def _iir_filter(
+    b: NDArray[np.float64],
+    a: NDArray[np.float64],
+    signal: NDArray[np.float64],
+    zi: NDArray[np.float64],
+) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
     """
-    Apply IIR filter (Direct Form II transposed), matching C++ SignalFilter::Filter.
+    Apply IIR filter (Direct Form II transposed).
 
-    This uses scipy.signal.lfilter which implements exactly the same
-    Direct Form II transposed difference equations.
-
-    Args:
-        b: Numerator coefficients [b0, b1, b2].
-        a: Denominator coefficients [a0, a1, a2].
-        signal: Input signal.
-        zi: Initial filter conditions (length = max(len(a), len(b)) - 1).
-
-    Returns:
-        Tuple of (filtered_signal, final_conditions).
+    Matches C++ ``SignalFilter::Filter``.
     """
     y, zf = lfilter(b, a, signal, zi=zi)
     return y, zf
@@ -177,42 +192,44 @@ def _iir_filter(b: np.ndarray, a: np.ndarray, signal: np.ndarray,
 class GammatoneFilterBank:
     """
     Gammatone filterbank that applies 4-stage cascaded IIR filtering.
-    Each stage uses different A coefficients but the same B (denominator) coefficients.
+
+    Each stage uses different A coefficients but the same B (denominator)
+    coefficients.
     """
 
-    def __init__(self, num_bands: int, min_freq: float):
-        self.num_bands = num_bands
-        self.min_freq = min_freq
-        # Filter conditions for 4 stages, each (num_bands, 2) shaped
-        self._conditions = None
+    def __init__(self, num_bands: int, min_freq: float) -> None:
+        self.num_bands: int = num_bands
+        self.min_freq: float = min_freq
+        self._conditions: Optional[List[List[NDArray[np.float64]]]] = None
 
-    def reset_conditions(self):
+    def reset_conditions(self) -> None:
         """Reset all filter conditions to zero."""
         self._conditions = [
             [np.zeros(2) for _ in range(self.num_bands)]
             for _ in range(4)
         ]
 
-    def apply_filter(self, signal: np.ndarray,
-                     filter_coeffs: np.ndarray) -> np.ndarray:
+    def apply_filter(
+        self,
+        signal: NDArray[np.float64],
+        filter_coeffs: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
         """
         Apply 4-stage cascaded gammatone filter to signal for all bands.
 
-        The filter_coeffs matrix has been flipped updown, so rows correspond
-        to bands in reversed order. Columns:
-        [A0, A11, A12, A13, A14, A2, B0, B1, B2, gain]
-
         Args:
-            signal: Input signal frame (1D array).
-            filter_coeffs: (10, num_bands) coefficient matrix.
+            signal: Input signal frame (1-D array).
+            filter_coeffs: ``(10, num_bands)`` coefficient matrix.
 
         Returns:
-            (num_bands, len(signal)) filtered output matrix.
+            ``(num_bands, len(signal))`` filtered output matrix.
         """
+        assert self._conditions is not None, "Call reset_conditions() first"
+
         output = np.zeros((self.num_bands, len(signal)))
 
         # Extract coefficient vectors
-        A0 = filter_coeffs[0]    # (num_bands,)
+        A0 = filter_coeffs[0]
         A11 = filter_coeffs[1]
         A12 = filter_coeffs[2]
         A13 = filter_coeffs[3]
@@ -225,9 +242,11 @@ class GammatoneFilterBank:
 
         for chan in range(self.num_bands):
             # Stage 1: normalize by gain
-            a1_b = np.array([A0[chan] / gain[chan],
-                             A11[chan] / gain[chan],
-                             A2[chan] / gain[chan]])
+            a1_b = np.array([
+                A0[chan] / gain[chan],
+                A11[chan] / gain[chan],
+                A2[chan] / gain[chan],
+            ])
             # Stage 2
             a2_b = np.array([A0[chan], A12[chan], A2[chan]])
             # Stage 3
@@ -239,20 +258,16 @@ class GammatoneFilterBank:
             denom = np.array([B0[chan], B1[chan], B2[chan]])
 
             # 4-stage cascade
-            y, zf = lfilter(a1_b, denom, signal,
-                            zi=self._conditions[0][chan])
+            y, zf = lfilter(a1_b, denom, signal, zi=self._conditions[0][chan])
             self._conditions[0][chan] = zf
 
-            y, zf = lfilter(a2_b, denom, y,
-                            zi=self._conditions[1][chan])
+            y, zf = lfilter(a2_b, denom, y, zi=self._conditions[1][chan])
             self._conditions[1][chan] = zf
 
-            y, zf = lfilter(a3_b, denom, y,
-                            zi=self._conditions[2][chan])
+            y, zf = lfilter(a3_b, denom, y, zi=self._conditions[2][chan])
             self._conditions[2][chan] = zf
 
-            y, zf = lfilter(a4_b, denom, y,
-                            zi=self._conditions[3][chan])
+            y, zf = lfilter(a4_b, denom, y, zi=self._conditions[3][chan])
             self._conditions[3][chan] = zf
 
             output[chan] = y
@@ -261,19 +276,24 @@ class GammatoneFilterBank:
 
 
 class Spectrogram:
-    """
-    Spectrogram data container with dB conversion and noise floor processing.
-    """
+    """Spectrogram data container with dB conversion and noise floor processing."""
 
-    def __init__(self, data: np.ndarray,
-                 center_freq_bands: np.ndarray = None):
+    __slots__ = ("data", "center_freq_bands")
+
+    def __init__(
+        self,
+        data: NDArray[np.float64],
+        center_freq_bands: Optional[NDArray[np.float64]] = None,
+    ) -> None:
         """
         Args:
-            data: (num_bands, num_frames) spectrogram matrix.
+            data: ``(num_bands, num_frames)`` spectrogram matrix.
             center_freq_bands: Center frequencies for each band (low to high).
         """
-        self.data = np.asarray(data, dtype=np.float64)
-        self.center_freq_bands = center_freq_bands if center_freq_bands is not None else np.array([])
+        self.data: NDArray[np.float64] = np.asarray(data, dtype=np.float64)
+        self.center_freq_bands: NDArray[np.float64] = (
+            center_freq_bands if center_freq_bands is not None else np.array([])
+        )
 
     @property
     def num_bands(self) -> int:
@@ -284,11 +304,12 @@ class Spectrogram:
         return self.data.shape[1]
 
 
-def convert_to_db(matrix: np.ndarray) -> np.ndarray:
+def convert_to_db(matrix: NDArray[np.float64]) -> NDArray[np.float64]:
     """
-    Convert spectrogram values to decibels: 10 * log10(|x|).
+    Convert spectrogram values to decibels: ``10 * log10(|x|)``.
+
     Zero values are replaced with machine epsilon.
-    Matches C++ Spectrogram::ConvertSampleToDb.
+    Matches C++ ``Spectrogram::ConvertSampleToDb``.
     """
     abs_matrix = np.abs(matrix)
     abs_matrix = np.where(abs_matrix == 0, np.finfo(np.float64).eps, abs_matrix)
@@ -297,21 +318,22 @@ def convert_to_db(matrix: np.ndarray) -> np.ndarray:
 
 def prepare_spectrograms_for_comparison(
     ref_spec: Spectrogram, deg_spec: Spectrogram
-) -> tuple:
+) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
     """
     Prepare reference and degraded spectrograms for comparison.
+
     1. Convert to dB
-    2. Apply absolute noise floor (-45 dB)
-    3. Apply per-frame relative noise floor (peak - 45 dB)
+    2. Apply absolute noise floor (−45 dB)
+    3. Apply per-frame relative noise floor (peak − 45 dB)
     4. Normalize to 0 dB global floor
 
-    Matches C++ MiscAudio::PrepareSpectrogramsForComparison.
+    Matches C++ ``MiscAudio::PrepareSpectrogramsForComparison``.
 
     Returns:
-        Tuple of (ref_db, deg_db) as numpy arrays.
+        Tuple of ``(ref_db, deg_db)`` as numpy arrays.
     """
-    NOISE_FLOOR_ABSOLUTE_DB = -45.0
-    NOISE_FLOOR_RELATIVE_TO_PEAK_DB = 45.0
+    NOISE_FLOOR_ABSOLUTE_DB: float = -45.0
+    NOISE_FLOOR_RELATIVE_TO_PEAK_DB: float = 45.0
 
     # 1. Convert to dB
     ref_db = convert_to_db(ref_spec.data)
@@ -326,14 +348,14 @@ def prepare_spectrograms_for_comparison(
     for i in range(min_cols):
         our_max = np.max(ref_db[:, i])
         other_max = np.max(deg_db[:, i])
-        any_max = max(our_max, other_max)
+        any_max = max(float(our_max), float(other_max))
         floor_db = any_max - NOISE_FLOOR_RELATIVE_TO_PEAK_DB
 
         ref_db[:, i] = np.maximum(ref_db[:, i], floor_db)
         deg_db[:, i] = np.maximum(deg_db[:, i], floor_db)
 
     # 4. Global normalization: subtract global minimum
-    lowest = min(np.min(ref_db), np.min(deg_db))
+    lowest = min(float(np.min(ref_db)), float(np.min(deg_db)))
     ref_db -= lowest
     deg_db -= lowest
 
@@ -341,23 +363,24 @@ def prepare_spectrograms_for_comparison(
 
 
 class GammatoneSpectrogramBuilder:
-    """
-    Builds a gammatone-filtered spectrogram from an audio signal.
-    """
+    """Builds a gammatone-filtered spectrogram from an audio signal."""
 
-    def __init__(self, num_bands: int, min_freq: float,
-                 speech_mode: bool = False):
+    def __init__(
+        self,
+        num_bands: int,
+        min_freq: float,
+        speech_mode: bool = False,
+    ) -> None:
         """
         Args:
             num_bands: Number of frequency bands.
             min_freq: Minimum center frequency.
-            speech_mode: If True, cap max frequency at 8000 Hz.
+            speech_mode: If *True*, cap max frequency at 8000 Hz.
         """
-        self.filter_bank = GammatoneFilterBank(num_bands, min_freq)
-        self.speech_mode = speech_mode
+        self.filter_bank: GammatoneFilterBank = GammatoneFilterBank(num_bands, min_freq)
+        self.speech_mode: bool = speech_mode
 
-    def build(self, signal: AudioSignal,
-              window: AnalysisWindow) -> Spectrogram:
+    def build(self, signal: AudioSignal, window: AnalysisWindow) -> Spectrogram:
         """
         Build a gammatone spectrogram from an audio signal.
 
@@ -366,7 +389,7 @@ class GammatoneSpectrogramBuilder:
             window: Analysis window parameters.
 
         Returns:
-            Spectrogram object.
+            :class:`Spectrogram` object.
 
         Raises:
             ValueError: If signal is too short.
@@ -379,7 +402,7 @@ class GammatoneSpectrogramBuilder:
 
         # Compute ERB filter coefficients
         erb_result = make_erb_filters(
-            sample_rate, num_bands, self.filter_bank.min_freq, max_freq
+            sample_rate, num_bands, self.filter_bank.min_freq, max_freq,
         )
         # Flip updown (reverse row order) to match C++
         filter_coeffs = erb_result.filter_coeffs[:, ::-1]
@@ -409,10 +432,10 @@ class GammatoneSpectrogramBuilder:
             # Apply gammatone filter bank
             filtered = self.filter_bank.apply_filter(windowed_frame, filter_coeffs)
 
-            # RMS per band: sqrt(mean(filtered^2))
+            # RMS per band: sqrt(mean(filtered²))
             out_matrix[:, i] = np.sqrt(np.mean(filtered ** 2, axis=1))
 
         # Order center frequencies from lowest to highest (reverse the ERB order)
-        ordered_cfs = erb_result.center_freqs[::-1].copy()
+        ordered_cfs: NDArray[np.float64] = erb_result.center_freqs[::-1].copy()
 
         return Spectrogram(out_matrix, center_freq_bands=ordered_cfs)

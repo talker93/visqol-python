@@ -4,16 +4,21 @@ Dynamic programming patch matching and fine alignment.
 Corresponds to C++ file: comparison_patches_selector.cc (384 lines)
 """
 
+from __future__ import annotations
+
 import logging
 import math
+from typing import List
+
 import numpy as np
-from typing import List, Optional
+from numpy.typing import NDArray
 
 from visqol.audio_utils import AudioSignal
 from visqol.analysis_window import AnalysisWindow
 from visqol.nsim import PatchSimilarityResult, measure_patch_similarity
 from visqol.gammatone import (
-    GammatoneSpectrogramBuilder, Spectrogram,
+    GammatoneSpectrogramBuilder,
+    Spectrogram,
     prepare_spectrograms_for_comparison,
 )
 from visqol.alignment import align_and_truncate
@@ -21,25 +26,30 @@ from visqol.alignment import align_and_truncate
 logger = logging.getLogger(__name__)
 
 
-def build_degraded_patch(spectrogram_data: np.ndarray,
-                         window_beginning: int, window_end: int,
-                         window_height: int, window_width: int) -> np.ndarray:
+def build_degraded_patch(
+    spectrogram_data: NDArray[np.float64],
+    window_beginning: int,
+    window_end: int,
+    window_height: int,
+    window_width: int,
+) -> NDArray[np.float64]:
     """
-    Build a degraded patch from spectrogram data with zero-padding for out-of-bounds.
+    Build a degraded patch from spectrogram data with zero-padding
+    for out-of-bounds.
 
-    Matches C++ ComparisonPatchesSelector::BuildDegradedPatch.
+    Matches C++ ``ComparisonPatchesSelector::BuildDegradedPatch``.
 
     Args:
-        spectrogram_data: (num_bands, num_frames) degraded spectrogram.
+        spectrogram_data: ``(num_bands, num_frames)`` degraded spectrogram.
         window_beginning: Start frame index (can be negative).
         window_end: End frame index (inclusive).
         window_height: Number of frequency bands.
         window_width: Number of frames per patch.
 
     Returns:
-        (window_height, window_width) patch matrix.
+        ``(window_height, window_width)`` patch matrix.
     """
-    num_cols = spectrogram_data.shape[1]
+    num_cols: int = spectrogram_data.shape[1]
     deg_patch = np.zeros((window_height, window_width))
 
     first_real_frame = max(0, window_beginning)
@@ -47,8 +57,9 @@ def build_degraded_patch(spectrogram_data: np.ndarray,
 
     for row_idx in range(spectrogram_data.shape[0]):
         if first_real_frame <= last_real_frame:
-            row_data = spectrogram_data[row_idx,
-                                        first_real_frame:last_real_frame + 1].copy()
+            row_data = spectrogram_data[
+                row_idx, first_real_frame:last_real_frame + 1
+            ].copy()
         else:
             row_data = np.array([])
 
@@ -71,33 +82,38 @@ def build_degraded_patch(spectrogram_data: np.ndarray,
     return deg_patch
 
 
-def _calc_max_num_patches(ref_patch_indices: List[int],
-                          num_frames_in_deg: int,
-                          num_frames_per_patch: int) -> int:
+def _calc_max_num_patches(
+    ref_patch_indices: List[int],
+    num_frames_in_deg: int,
+    num_frames_per_patch: int,
+) -> int:
     """
     Calculate max number of patches that fit within degraded spectrogram.
-    Matches C++ ComparisonPatchesSelector::CalcMaxNumPatches.
+
+    Matches C++ ``ComparisonPatchesSelector::CalcMaxNumPatches``.
     """
     num_patches = len(ref_patch_indices)
     if num_patches > 0:
-        while (num_patches > 0 and
-               ref_patch_indices[num_patches - 1] -
-               math.floor(num_frames_per_patch / 2) > num_frames_in_deg):
+        while (
+            num_patches > 0
+            and ref_patch_indices[num_patches - 1]
+                - math.floor(num_frames_per_patch / 2) > num_frames_in_deg
+        ):
             num_patches -= 1
     return num_patches
 
 
 def find_most_optimal_deg_patches(
-    ref_patches: List[np.ndarray],
+    ref_patches: List[NDArray[np.float64]],
     ref_patch_indices: List[int],
-    spectrogram_data: np.ndarray,
+    spectrogram_data: NDArray[np.float64],
     frame_duration: float,
     search_window_radius: int = 60,
 ) -> List[PatchSimilarityResult]:
     """
     Find the most optimal degraded patches using dynamic programming.
 
-    Matches C++ ComparisonPatchesSelector::FindMostOptimalDegPatches.
+    Matches C++ ``ComparisonPatchesSelector::FindMostOptimalDegPatches``.
 
     Args:
         ref_patches: List of reference patch matrices.
@@ -107,16 +123,19 @@ def find_most_optimal_deg_patches(
         search_window_radius: Search window radius in patch units.
 
     Returns:
-        List of PatchSimilarityResult for each matched pair.
-    """
-    num_frames_per_patch = ref_patches[0].shape[1]
-    num_bands = ref_patches[0].shape[0]
-    num_frames_in_deg = spectrogram_data.shape[1]
-    patch_duration = frame_duration * num_frames_per_patch
-    search_window = search_window_radius * num_frames_per_patch
+        List of :class:`PatchSimilarityResult` for each matched pair.
 
-    num_patches = _calc_max_num_patches(
-        ref_patch_indices, num_frames_in_deg, num_frames_per_patch
+    Raises:
+        ValueError: If no patches can be scored.
+    """
+    num_frames_per_patch: int = ref_patches[0].shape[1]
+    num_bands: int = ref_patches[0].shape[0]
+    num_frames_in_deg: int = spectrogram_data.shape[1]
+    patch_duration: float = frame_duration * num_frames_per_patch
+    search_window: int = search_window_radius * num_frames_per_patch
+
+    num_patches: int = _calc_max_num_patches(
+        ref_patch_indices, num_frames_in_deg, num_frames_per_patch,
     )
 
     if num_patches == 0:
@@ -129,24 +148,27 @@ def find_most_optimal_deg_patches(
         logger.warning(
             "Dropping %d (of %d) reference patches due to degraded file "
             "being misaligned or too short.",
-            len(ref_patch_indices) - num_patches, len(ref_patch_indices)
+            len(ref_patch_indices) - num_patches,
+            len(ref_patch_indices),
         )
 
     # Pre-build all degraded patches
-    deg_patches = []
+    deg_patches: List[NDArray[np.float64]] = []
     for offset in range(num_frames_in_deg):
         patch = build_degraded_patch(
             spectrogram_data, offset,
             offset + num_frames_per_patch - 1,
-            num_bands, num_frames_per_patch
+            num_bands, num_frames_per_patch,
         )
         deg_patches.append(patch)
 
     # DP tables
-    cumulative_dp = np.full((len(ref_patch_indices), num_frames_in_deg),
-                            0.0, dtype=np.float64)
-    backtrace = np.full((len(ref_patch_indices), num_frames_in_deg),
-                        -1, dtype=np.int64)
+    cumulative_dp = np.full(
+        (len(ref_patch_indices), num_frames_in_deg), 0.0, dtype=np.float64,
+    )
+    backtrace = np.full(
+        (len(ref_patch_indices), num_frames_in_deg), -1, dtype=np.int64,
+    )
 
     # Forward pass
     for patch_index in range(num_patches):
@@ -161,18 +183,18 @@ def find_most_optimal_deg_patches(
 
             deg_patch = deg_patches[slide_offset]
             sim_result = measure_patch_similarity(
-                ref_patches[patch_index], deg_patch
+                ref_patches[patch_index], deg_patch,
             )
-            sim_val = sim_result.similarity
+            sim_val: float = sim_result.similarity
 
-            past_slide_offset = -1
-            highest_sim = -np.inf
+            past_slide_offset: int = -1
+            highest_sim: float = float(-np.inf)
 
             if patch_index > 0:
-                lower_limit = max(0,
-                                  ref_patch_indices[patch_index - 1] - search_window)
+                lower_limit = max(
+                    0, ref_patch_indices[patch_index - 1] - search_window,
+                )
 
-                # Search backwards for best previous cumulative score
                 back_offset = slide_offset - 1
                 while back_offset >= lower_limit:
                     if cumulative_dp[patch_index - 1, back_offset] > highest_sim:
@@ -182,7 +204,6 @@ def find_most_optimal_deg_patches(
 
                 sim_val += highest_sim
 
-                # Packet loss handling: check if skipping current is better
                 if cumulative_dp[patch_index - 1, slide_offset] > sim_val:
                     sim_val = cumulative_dp[patch_index - 1, slide_offset]
                     past_slide_offset = slide_offset
@@ -193,11 +214,12 @@ def find_most_optimal_deg_patches(
     # Find best ending offset
     last_index = num_patches - 1
     lower_limit = max(0, ref_patch_indices[last_index] - search_window)
-    upper_limit = min(num_frames_in_deg - 1,
-                      ref_patch_indices[last_index] + search_window)
+    upper_limit = min(
+        num_frames_in_deg - 1, ref_patch_indices[last_index] + search_window,
+    )
 
-    max_score = -np.inf
-    last_offset = lower_limit
+    max_score: float = float(-np.inf)
+    last_offset: int = lower_limit
     for slide_offset in range(lower_limit, upper_limit + 1):
         if slide_offset >= num_frames_in_deg:
             break
@@ -206,14 +228,16 @@ def find_most_optimal_deg_patches(
             last_offset = slide_offset
 
     # Backtrace to find best path
-    best_deg_patches = [PatchSimilarityResult() for _ in range(num_patches)]
+    best_deg_patches: List[PatchSimilarityResult] = [
+        PatchSimilarityResult() for _ in range(num_patches)
+    ]
 
     for patch_index in range(num_patches - 1, -1, -1):
         ref_patch = ref_patches[patch_index]
         deg_patch = build_degraded_patch(
             spectrogram_data, last_offset,
             last_offset + num_frames_per_patch - 1,
-            num_bands, num_frames_per_patch
+            num_bands, num_frames_per_patch,
         )
 
         sim_result = measure_patch_similarity(ref_patch, deg_patch)
@@ -243,15 +267,16 @@ def find_most_optimal_deg_patches(
     return best_deg_patches
 
 
-def slice_signal(signal: AudioSignal, start_time: float,
-                 end_time: float) -> AudioSignal:
+def slice_signal(
+    signal: AudioSignal, start_time: float, end_time: float
+) -> AudioSignal:
     """
     Slice an audio signal by time range.
-    Matches C++ ComparisonPatchesSelector::Slice.
+
+    Matches C++ ``ComparisonPatchesSelector::Slice``.
     """
     start_index = max(0, int(start_time * signal.sample_rate))
-    end_index = min(len(signal.data) - 1,
-                    int(end_time * signal.sample_rate))
+    end_index = min(len(signal.data) - 1, int(end_time * signal.sample_rate))
 
     sliced = signal.data[start_index:end_index].copy()
 
@@ -278,42 +303,46 @@ def finely_align_and_recreate_patches(
     """
     Fine-align each matched patch pair in the time domain.
 
-    Matches C++ ComparisonPatchesSelector::FinelyAlignAndRecreatePatches.
+    Matches C++ ``ComparisonPatchesSelector::FinelyAlignAndRecreatePatches``.
 
     For each matched pair:
+
     1. Extract audio sub-signals
     2. Re-align at fine granularity
     3. Rebuild spectrograms
     4. Recompute NSIM
     5. Keep the better result (original or re-aligned)
     """
-    realigned_results = list(sim_results)  # copy
+    realigned_results: List[PatchSimilarityResult] = list(sim_results)
 
     for i, sim_result in enumerate(sim_results):
         # Skip packet-loss patches
-        if (sim_result.deg_patch_start_time == sim_result.deg_patch_end_time
-                and sim_result.deg_patch_start_time == 0.0):
+        if (
+            sim_result.deg_patch_start_time == sim_result.deg_patch_end_time
+            and sim_result.deg_patch_start_time == 0.0
+        ):
             continue
 
         # 1. Extract audio segments
-        ref_audio = slice_signal(ref_signal,
-                                 sim_result.ref_patch_start_time,
-                                 sim_result.ref_patch_end_time)
-        deg_audio = slice_signal(deg_signal,
-                                 sim_result.deg_patch_start_time,
-                                 sim_result.deg_patch_end_time)
+        ref_audio = slice_signal(
+            ref_signal,
+            sim_result.ref_patch_start_time,
+            sim_result.ref_patch_end_time,
+        )
+        deg_audio = slice_signal(
+            deg_signal,
+            sim_result.deg_patch_start_time,
+            sim_result.deg_patch_end_time,
+        )
 
         # 2. Fine alignment
         try:
-            ref_aligned, deg_aligned, lag = align_and_truncate(
-                ref_audio, deg_audio
-            )
+            ref_aligned, deg_aligned, lag = align_and_truncate(ref_audio, deg_audio)
         except Exception:
             continue
 
         # Check we have enough samples
-        if (len(ref_aligned.data) <= window.size or
-                len(deg_aligned.data) <= window.size):
+        if len(ref_aligned.data) <= window.size or len(deg_aligned.data) <= window.size:
             continue
 
         # 3. Rebuild spectrograms
