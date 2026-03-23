@@ -17,10 +17,10 @@ ViSQOL compares a reference audio signal with a degraded version and outputs a *
 ## Installation
 
 ```bash
-pip install numpy scipy soundfile libsvm-official
+pip install visqol-python
 ```
 
-Or install as a package:
+Or install from source:
 
 ```bash
 git clone https://github.com/talker93/visqol-python.git

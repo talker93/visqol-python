@@ -7,7 +7,7 @@ with open(os.path.join(here, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="visqol",
+    name="visqol-python",
     version="3.3.3",
     description="ViSQOL - Virtual Speech Quality Objective Listener (Pure Python)",
     long_description=long_description,
