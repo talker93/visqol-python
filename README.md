@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/visqol-python)](https://pypi.org/project/visqol-python/)
 [![License](https://img.shields.io/github/license/talker93/visqol-python)](LICENSE)
 
-A pure Python implementation of [Google's ViSQOL](https://github.com/google/visqol) (Virtual Speech Quality Objective Listener) v3.3.3 for objective audio/speech quality assessment.
+A pure Python implementation of [Google's ViSQOL](https://github.com/google/visqol) (Virtual Speech Quality Objective Listener) for objective audio/speech quality assessment.
 
 ViSQOL compares a reference audio signal with a degraded version and outputs a **MOS-LQO** (Mean Opinion Score - Listening Quality Objective) score on a scale of **1.0 – 5.0**.
 
@@ -16,8 +16,10 @@ ViSQOL compares a reference audio signal with a degraded version and outputs a *
   - Audio mode: 9/10 tests produce **identical** MOS scores (diff = 0.000000), 1 test diff = 0.000117
   - Speech mode: diff = 0.006715
 - **Pure Python**: no C/C++ compilation required
-- **Minimal dependencies**: only 4 pip packages (`numpy`, `scipy`, `soundfile`, `libsvm-official`)
-- **Faster than real-time**: Audio RTF ≈ 0.71x, Speech RTF ≈ 0.38x
+- **Minimal dependencies**: 4 core pip packages (`numpy`, `scipy`, `soundfile`, `libsvm-official`)
+- **Optional Numba acceleration**: `pip install visqol-python[accel]` for JIT-compiled Gammatone filterbank (parallel + fastmath) and DP patch matching — **9× overall speedup**, RTF 0.064 (surpasses C++ estimates)
+- **Batch & parallel evaluation**: `measure_batch(parallel=True)` for multi-process execution across CPU cores
+- **Fully typed**: PEP 561 `py.typed`, strict mypy, ruff-enforced code style
 
 ## Installation
 
@@ -25,12 +27,18 @@ ViSQOL compares a reference audio signal with a degraded version and outputs a *
 pip install visqol-python
 ```
 
+For **Numba-accelerated** Gammatone filtering and DP matching (~9× faster):
+
+```bash
+pip install visqol-python[accel]
+```
+
 Or install from source:
 
 ```bash
 git clone https://github.com/talker93/visqol-python.git
 cd visqol-python
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ## Quick Start
@@ -83,11 +91,14 @@ file_pairs = [
     ("ref3.wav", "deg3.wav"),
 ]
 
-# Optional progress callback
+# Sequential with progress callback
 results = api.measure_batch(
     file_pairs,
     progress_callback=lambda done, total: print(f"{done}/{total}"),
 )
+
+# Multi-process parallel (uses all CPU cores)
+results = api.measure_batch(file_pairs, parallel=True, max_workers=4)
 
 for pair, result in zip(file_pairs, results):
     if isinstance(result, Exception):
@@ -152,12 +163,21 @@ The `measure()` method returns a `SimilarityResult` object with:
 
 Measured on Apple M-series, Python 3.13:
 
+### Without Numba (pure Python + NumPy/SciPy)
+
 | Mode | Avg RTF | Typical Time |
 |------|---------|-------------|
-| Audio (48 kHz) | **0.71x** | 7 – 12 s per file pair |
+| Audio (48 kHz) | **0.18x** | ~2.2 s per file pair |
 | Speech (16 kHz) | **0.38x** | ~1 s per file pair |
 
+### With Numba (`pip install visqol-python[accel]`)
+
+| Mode | Avg RTF | Typical Time | Speedup |
+|------|---------|-------------|---------|
+| Audio (48 kHz) | **0.064x** | ~0.8 s per file pair | **9×** |
+
 > RTF (Real-Time Factor) < 1.0 means faster than real-time.
+> With Numba acceleration, the Python implementation **surpasses C++ estimated performance** (RTF ≈ 0.093).
 
 ## Project Structure
 
@@ -177,18 +197,23 @@ visqol-python/
 │   ├── alignment.py           # Global alignment via cross-correlation
 │   ├── nsim.py                # NSIM similarity metric
 │   ├── quality_mapper.py      # SVR & exponential quality mapping
+│   ├── numba_accel.py         # Optional Numba JIT kernels (DP, NSIM, Gammatone)
 │   ├── __main__.py            # CLI entry point
+│   ├── py.typed               # PEP 561 type marker
 │   └── model/                 # Bundled SVR model
 │       └── libsvm_nu_svr_model.txt
-├── tests/                     # Tests (pytest)
+├── tests/                     # Tests & benchmarks (pytest)
 │   ├── conftest.py            # Shared fixtures & CLI options
 │   ├── test_quick.py          # Smoke tests (no external data needed)
-│   └── test_conformance.py    # Full conformance tests (needs testdata)
+│   ├── test_conformance.py    # Full conformance tests (needs testdata)
+│   ├── test_parallel_correctness.py  # Numba parallel correctness tests
+│   └── bench_*.py             # Performance benchmarks
 ├── .github/workflows/
-│   ├── ci.yml                 # CI: test on Python 3.9–3.13
+│   ├── ci.yml                 # CI: lint + type-check + test on Python 3.12
 │   └── publish.yml            # Auto-publish to PyPI on tag push
 ├── pyproject.toml             # Package metadata & build config
 ├── CHANGELOG.md
+├── CONTRIBUTING.md
 ├── LICENSE
 └── README.md
 ```
