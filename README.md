@@ -1,5 +1,10 @@
 # ViSQOL (Python)
 
+[![PyPI version](https://img.shields.io/pypi/v/visqol-python)](https://pypi.org/project/visqol-python/)
+[![CI](https://github.com/talker93/visqol-python/actions/workflows/ci.yml/badge.svg)](https://github.com/talker93/visqol-python/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/pypi/pyversions/visqol-python)](https://pypi.org/project/visqol-python/)
+[![License](https://img.shields.io/github/license/talker93/visqol-python)](LICENSE)
+
 A pure Python implementation of [Google's ViSQOL](https://github.com/google/visqol) (Virtual Speech Quality Objective Listener) v3.3.3 for objective audio/speech quality assessment.
 
 ViSQOL compares a reference audio signal with a degraded version and outputs a **MOS-LQO** (Mean Opinion Score - Listening Quality Objective) score on a scale of **1.0 – 5.0**.
@@ -132,8 +137,8 @@ Measured on Apple M-series, Python 3.13:
 ```
 visqol-python/
 ├── visqol/                    # Main package
-│   ├── __init__.py            # Package exports
-│   ├── api.py                 # Public API
+│   ├── __init__.py            # Package exports & version
+│   ├── api.py                 # Public API (VisqolApi)
 │   ├── visqol_manager.py      # Pipeline orchestrator
 │   ├── visqol_core.py         # Core algorithm
 │   ├── audio_utils.py         # Audio I/O & SPL normalization
@@ -145,14 +150,18 @@ visqol-python/
 │   ├── alignment.py           # Global alignment via cross-correlation
 │   ├── nsim.py                # NSIM similarity metric
 │   ├── quality_mapper.py      # SVR & exponential quality mapping
-│   └── __main__.py            # CLI entry point
-├── model/                     # Bundled SVR model
-│   └── libsvm_nu_svr_model.txt
-├── tests/                     # Conformance tests
-│   ├── test_conformance.py
-│   └── test_quick.py
-├── setup.py
-├── requirements.txt
+│   ├── __main__.py            # CLI entry point
+│   └── model/                 # Bundled SVR model
+│       └── libsvm_nu_svr_model.txt
+├── tests/                     # Tests (pytest)
+│   ├── conftest.py            # Shared fixtures & CLI options
+│   ├── test_quick.py          # Smoke tests (no external data needed)
+│   └── test_conformance.py    # Full conformance tests (needs testdata)
+├── .github/workflows/
+│   ├── ci.yml                 # CI: test on Python 3.9–3.13
+│   └── publish.yml            # Auto-publish to PyPI on tag push
+├── pyproject.toml             # Package metadata & build config
+├── CHANGELOG.md
 ├── LICENSE
 └── README.md
 ```

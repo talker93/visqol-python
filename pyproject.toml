@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visqol-python"
-version = "3.3.3"
+dynamic = ["version"]
 description = "ViSQOL - Virtual Speech Quality Objective Listener (Pure Python)"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
     {name = "Shan Jiang"},
 ]
@@ -21,7 +21,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -37,8 +36,12 @@ dependencies = [
     "libsvm-official>=3.25",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
 [project.urls]
 Homepage = "https://github.com/talker93/visqol-python"
+Changelog = "https://github.com/talker93/visqol-python/blob/main/CHANGELOG.md"
 "Bug Reports" = "https://github.com/talker93/visqol-python/issues"
 Source = "https://github.com/talker93/visqol-python"
 "Original C++" = "https://github.com/google/visqol"
@@ -46,8 +49,14 @@ Source = "https://github.com/talker93/visqol-python"
 [project.scripts]
 visqol = "visqol.__main__:main"
 
+[tool.setuptools.dynamic]
+version = {attr = "visqol.__version__"}
+
 [tool.setuptools.packages.find]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 visqol = ["model/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
