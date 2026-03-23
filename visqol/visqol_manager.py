@@ -7,19 +7,18 @@ Corresponds to C++ file: visqol_manager.cc
 from __future__ import annotations
 
 import logging
-from typing import Optional, Union
 
-from visqol.audio_utils import AudioSignal, load_as_mono
-from visqol.analysis_window import AnalysisWindow
 from visqol.alignment import globally_align
+from visqol.analysis_window import AnalysisWindow
+from visqol.audio_utils import AudioSignal, load_as_mono
 from visqol.gammatone import GammatoneSpectrogramBuilder
 from visqol.patch_creator import ImagePatchCreator, VadPatchCreator
 from visqol.quality_mapper import (
     SimilarityToQualityMapper,
-    SvrSimilarityToQualityMapper,
     SpeechSimilarityToQualityMapper,
+    SvrSimilarityToQualityMapper,
 )
-from visqol.visqol_core import VisqolCore, SimilarityResult
+from visqol.visqol_core import SimilarityResult, VisqolCore
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +45,9 @@ class VisqolManager:
         self.disable_realignment: bool = False
         self.is_initialized: bool = False
 
-        self.spect_builder: Optional[GammatoneSpectrogramBuilder] = None
-        self.patch_creator: Optional[Union[ImagePatchCreator, VadPatchCreator]] = None
-        self.quality_mapper: Optional[SimilarityToQualityMapper] = None
+        self.spect_builder: GammatoneSpectrogramBuilder | None = None
+        self.patch_creator: ImagePatchCreator | VadPatchCreator | None = None
+        self.quality_mapper: SimilarityToQualityMapper | None = None
         self.visqol_core: VisqolCore = VisqolCore()
 
     def init(
@@ -85,11 +84,15 @@ class VisqolManager:
         # Initialize spectrogram builder
         if use_speech_mode:
             self.spect_builder = GammatoneSpectrogramBuilder(
-                NUM_BANDS_SPEECH, MINIMUM_FREQ, speech_mode=True,
+                NUM_BANDS_SPEECH,
+                MINIMUM_FREQ,
+                speech_mode=True,
             )
         else:
             self.spect_builder = GammatoneSpectrogramBuilder(
-                NUM_BANDS_AUDIO, MINIMUM_FREQ, speech_mode=False,
+                NUM_BANDS_AUDIO,
+                MINIMUM_FREQ,
+                speech_mode=False,
             )
 
         # Initialize quality mapper
@@ -183,9 +186,7 @@ class VisqolManager:
         if not self.is_initialized:
             raise RuntimeError("VisqolManager must be initialized before use.")
 
-    def _validate_input(
-        self, ref_signal: AudioSignal, deg_signal: AudioSignal
-    ) -> None:
+    def _validate_input(self, ref_signal: AudioSignal, deg_signal: AudioSignal) -> None:
         """Validate input audio signals.
 
         Raises:
@@ -205,7 +206,8 @@ class VisqolManager:
         if abs(ref_dur - deg_dur) > DURATION_MISMATCH_TOLERANCE:
             logger.warning(
                 "Duration mismatch: reference=%.2fs, degraded=%.2fs",
-                ref_dur, deg_dur,
+                ref_dur,
+                deg_dur,
             )
 
         if self.use_speech_mode:

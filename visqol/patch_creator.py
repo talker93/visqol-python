@@ -12,15 +12,12 @@ Corresponds to C++ files:
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 import numpy as np
 from numpy.typing import NDArray
 
 from visqol.analysis_window import AnalysisWindow
 from visqol.audio_utils import AudioSignal
 from visqol.signal_utils import normalize
-
 
 # ============ RMS VAD ============
 
@@ -38,12 +35,12 @@ class RmsVad:
     RMS_THRESHOLD: float = 5000.0
 
     def __init__(self) -> None:
-        self.each_chunk_result: List[float] = []
+        self.each_chunk_result: list[float] = []
         # Initialize first (kSilentChunkCount - 1) results as voice-active
         # to avoid false negatives
-        self.vad_results: List[float] = [
-            self.VOICE_ACTIVITY_PRESENT
-        ] * (self.SILENT_CHUNK_COUNT - 1)
+        self.vad_results: list[float] = [self.VOICE_ACTIVITY_PRESENT] * (
+            self.SILENT_CHUNK_COUNT - 1
+        )
 
     def process_chunk(self, chunk: NDArray[np.int16]) -> float:
         """Process a chunk of int16 samples."""
@@ -54,13 +51,10 @@ class RmsVad:
             self.each_chunk_result.append(self.VOICE_ACTIVITY_PRESENT)
         return rms
 
-    def get_vad_results(self) -> List[float]:
+    def get_vad_results(self) -> list[float]:
         """Get VAD results for all processed chunks."""
         for i in range(self.SILENT_CHUNK_COUNT - 1, len(self.each_chunk_result)):
-            if (
-                not self.each_chunk_result[i]
-                and self._check_previous_chunks_for_silence(i)
-            ):
+            if not self.each_chunk_result[i] and self._check_previous_chunks_for_silence(i):
                 self.vad_results.append(self.VOICE_ACTIVITY_ABSENT)
             else:
                 self.vad_results.append(self.VOICE_ACTIVITY_PRESENT)
@@ -90,9 +84,9 @@ class ImagePatchCreator:
     def create_ref_patch_indices(
         self,
         spectrogram: NDArray[np.float64],
-        ref_signal: Optional[AudioSignal] = None,
-        window: Optional[AnalysisWindow] = None,
-    ) -> List[int]:
+        ref_signal: AudioSignal | None = None,
+        window: AnalysisWindow | None = None,
+    ) -> list[int]:
         """
         Create reference patch indices at evenly-spaced intervals.
 
@@ -124,7 +118,7 @@ class ImagePatchCreator:
         else:
             max_index = init_patch_index + 1
 
-        indices: List[int] = []
+        indices: list[int] = []
         i = init_patch_index
         while i < max_index:
             indices.append(i - 1)  # C++ uses 0-based, pushes i-1
@@ -135,8 +129,8 @@ class ImagePatchCreator:
     def create_patches_from_indices(
         self,
         spectrogram: NDArray[np.float64],
-        patch_indices: List[int],
-    ) -> List[NDArray[np.float64]]:
+        patch_indices: list[int],
+    ) -> list[NDArray[np.float64]]:
         """
         Extract patches from spectrogram at given start indices.
 
@@ -147,7 +141,7 @@ class ImagePatchCreator:
         Returns:
             List of ``(num_bands, patch_size)`` patch matrices.
         """
-        patches: List[NDArray[np.float64]] = []
+        patches: list[NDArray[np.float64]] = []
         for start_col in patch_indices:
             end_col = start_col + self.patch_size
             patch = spectrogram[:, start_col:end_col]
@@ -176,17 +170,17 @@ class VadPatchCreator:
         start_sample: int,
         total_samples: int,
         frame_len: int,
-    ) -> List[float]:
+    ) -> list[float]:
         """
         Get voice activity detection results for a signal segment.
 
         Matches C++ ``VadPatchCreator::GetVoiceActivity``.
         """
         rms_vad = RmsVad()
-        data = signal.data[start_sample:start_sample + total_samples]
+        data = signal.data[start_sample : start_sample + total_samples]
 
         # Convert to int16 range and process in chunks
-        frame: List[int] = []
+        frame: list[int] = []
         for val in data:
             int_val = val * (1 << 15)
             int_val = max(-1.0 * (1 << 15), min(1.0 * ((1 << 15) - 1), int_val))
@@ -202,7 +196,7 @@ class VadPatchCreator:
         spectrogram: NDArray[np.float64],
         ref_signal: AudioSignal,
         window: AnalysisWindow,
-    ) -> List[int]:
+    ) -> list[int]:
         """
         Create VAD-filtered reference patch indices.
 
@@ -221,11 +215,14 @@ class VadPatchCreator:
 
         # Get VAD results
         vad_res = self._get_voice_activity(
-            norm_signal, first_patch_idx, total_sample_count, frame_size,
+            norm_signal,
+            first_patch_idx,
+            total_sample_count,
+            frame_size,
         )
 
         # Filter patches based on VAD
-        ref_patch_indices: List[int] = []
+        ref_patch_indices: list[int] = []
         patch_idx = first_patch_idx
         for i in range(patch_count):
             start = i * self.patch_size
@@ -243,10 +240,10 @@ class VadPatchCreator:
     def create_patches_from_indices(
         self,
         spectrogram: NDArray[np.float64],
-        patch_indices: List[int],
-    ) -> List[NDArray[np.float64]]:
+        patch_indices: list[int],
+    ) -> list[NDArray[np.float64]]:
         """Extract patches from spectrogram at given indices."""
-        patches: List[NDArray[np.float64]] = []
+        patches: list[NDArray[np.float64]] = []
         for start_col in patch_indices:
             end_col = start_col + self.patch_size
             patch = spectrogram[:, start_col:end_col]

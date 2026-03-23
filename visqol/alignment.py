@@ -6,17 +6,13 @@ Corresponds to C++ file: alignment.cc
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import numpy as np
 
 from visqol.audio_utils import AudioSignal
-from visqol.signal_utils import upper_envelope, find_best_lag
+from visqol.signal_utils import find_best_lag, upper_envelope
 
 
-def globally_align(
-    reference: AudioSignal, degraded: AudioSignal
-) -> Tuple[AudioSignal, float]:
+def globally_align(reference: AudioSignal, degraded: AudioSignal) -> tuple[AudioSignal, float]:
     """
     Globally align degraded signal to reference signal.
 
@@ -43,7 +39,7 @@ def globally_align(
 
     if best_lag < 0:
         # Degraded comes before reference: truncate front of degraded
-        new_data = degraded.data[abs(best_lag):]
+        new_data = degraded.data[abs(best_lag) :]
     else:
         # Reference comes before degraded: prepend zeros to degraded
         new_data = np.concatenate([np.zeros(best_lag), degraded.data])
@@ -55,7 +51,7 @@ def globally_align(
 
 def align_and_truncate(
     reference: AudioSignal, degraded: AudioSignal
-) -> Tuple[AudioSignal, AudioSignal, float]:
+) -> tuple[AudioSignal, AudioSignal, float]:
     """
     Align and truncate signals to the same length.
 
@@ -70,15 +66,15 @@ def align_and_truncate(
     deg_data = aligned_deg.data
 
     if len(ref_data) > len(deg_data):
-        ref_data = ref_data[:len(deg_data)]
+        ref_data = ref_data[: len(deg_data)]
     elif len(ref_data) < len(deg_data):
         # For positive lag, the beginning of ref aligns with zeros
         lag_samples = int(lag_seconds * reference.sample_rate)
         if lag_samples > 0:
             ref_data = ref_data[lag_samples:]
-            deg_data = deg_data[lag_samples:lag_samples + len(ref_data)]
+            deg_data = deg_data[lag_samples : lag_samples + len(ref_data)]
         else:
-            deg_data = deg_data[:len(ref_data)]
+            deg_data = deg_data[: len(ref_data)]
 
     # Ensure same length
     min_len = min(len(ref_data), len(deg_data))

@@ -9,10 +9,9 @@ Corresponds to C++ files:
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -31,9 +30,9 @@ class SimilarityToQualityMapper(ABC):
     def predict_quality(
         self,
         fvnsim: NDArray[np.float64],
-        fvnsim10: Optional[NDArray[np.float64]] = None,
-        fstdnsim: Optional[NDArray[np.float64]] = None,
-        fvdegenergy: Optional[NDArray[np.float64]] = None,
+        fvnsim10: NDArray[np.float64] | None = None,
+        fstdnsim: NDArray[np.float64] | None = None,
+        fvdegenergy: NDArray[np.float64] | None = None,
     ) -> float:
         """Predict MOS quality from NSIM feature vectors."""
 
@@ -57,16 +56,16 @@ class SvrSimilarityToQualityMapper(SimilarityToQualityMapper):
             ImportError: If libsvm is not installed.
         """
         if not os.path.exists(self.model_path):
-            raise FileNotFoundError(
-                f"SVR model file not found: {self.model_path}"
-            )
+            raise FileNotFoundError(f"SVR model file not found: {self.model_path}")
 
         try:
             from svmutil import svm_load_model
+
             self.model = svm_load_model(self.model_path)
         except ImportError:
             try:
                 from libsvm.svmutil import svm_load_model
+
                 self.model = svm_load_model(self.model_path)
             except ImportError:
                 raise ImportError(
@@ -77,9 +76,9 @@ class SvrSimilarityToQualityMapper(SimilarityToQualityMapper):
     def predict_quality(
         self,
         fvnsim: NDArray[np.float64],
-        fvnsim10: Optional[NDArray[np.float64]] = None,
-        fstdnsim: Optional[NDArray[np.float64]] = None,
-        fvdegenergy: Optional[NDArray[np.float64]] = None,
+        fvnsim10: NDArray[np.float64] | None = None,
+        fstdnsim: NDArray[np.float64] | None = None,
+        fvdegenergy: NDArray[np.float64] | None = None,
     ) -> float:
         """Predict MOS using SVR model.  Only *fvnsim* is used as features."""
         try:
@@ -115,9 +114,9 @@ class SpeechSimilarityToQualityMapper(SimilarityToQualityMapper):
     def predict_quality(
         self,
         fvnsim: NDArray[np.float64],
-        fvnsim10: Optional[NDArray[np.float64]] = None,
-        fstdnsim: Optional[NDArray[np.float64]] = None,
-        fvdegenergy: Optional[NDArray[np.float64]] = None,
+        fvnsim10: NDArray[np.float64] | None = None,
+        fstdnsim: NDArray[np.float64] | None = None,
+        fvdegenergy: NDArray[np.float64] | None = None,
     ) -> float:
         """Predict MOS using exponential fit: ``a + exp(b * (x - x0))``."""
         nsim_mean: float = float(np.mean(fvnsim))

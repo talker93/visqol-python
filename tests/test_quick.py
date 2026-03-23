@@ -10,11 +10,9 @@ import pytest
 from visqol import (
     AudioSignal,
     PatchSimilarityResult,
-    ProgressCallback,
     SimilarityResult,
     VisqolApi,
 )
-
 
 # ── API creation ──
 
@@ -126,9 +124,7 @@ class TestMeasureFromArrays:
         rng = np.random.default_rng(42)
         deg = ref + 0.3 * rng.standard_normal(len(ref))
         result = api.measure_from_arrays(ref, deg, sample_rate=sr)
-        assert 1.0 <= result.moslqo <= 5.0, (
-            f"MOS should be in [1, 5], got {result.moslqo:.4f}"
-        )
+        assert 1.0 <= result.moslqo <= 5.0, f"MOS should be in [1, 5], got {result.moslqo:.4f}"
 
 
 # ── Result fields ──
@@ -209,10 +205,12 @@ class TestMeasureBatch:
     def test_batch_nonexistent_files_returns_exceptions(self):
         api = VisqolApi()
         api.create(mode="speech")
-        results = api.measure_batch([
-            ("/nonexistent/a.wav", "/nonexistent/b.wav"),
-            ("/nonexistent/c.wav", "/nonexistent/d.wav"),
-        ])
+        results = api.measure_batch(
+            [
+                ("/nonexistent/a.wav", "/nonexistent/b.wav"),
+                ("/nonexistent/c.wav", "/nonexistent/d.wav"),
+            ]
+        )
         assert len(results) == 2
         assert all(isinstance(r, Exception) for r in results)
 
@@ -246,6 +244,7 @@ class TestVersion:
 
     def test_version_string(self):
         import visqol
+
         assert hasattr(visqol, "__version__")
         assert isinstance(visqol.__version__, str)
         parts = visqol.__version__.split(".")
@@ -254,6 +253,7 @@ class TestVersion:
     def test_public_exports(self):
         """Package should export key classes."""
         import visqol
+
         assert hasattr(visqol, "VisqolApi")
         assert hasattr(visqol, "SimilarityResult")
         assert hasattr(visqol, "AudioSignal")

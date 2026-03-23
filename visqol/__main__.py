@@ -23,39 +23,52 @@ def main() -> None:
         description="ViSQOL - Virtual Speech Quality Objective Listener (Python)",
     )
     parser.add_argument(
-        "--reference", "-r", required=True,
+        "--reference",
+        "-r",
+        required=True,
         help="Path to reference audio file (WAV)",
     )
     parser.add_argument(
-        "--degraded", "-d", required=True,
+        "--degraded",
+        "-d",
+        required=True,
         help="Path to degraded audio file (WAV)",
     )
     parser.add_argument(
-        "--speech_mode", action="store_true",
+        "--speech_mode",
+        action="store_true",
         help="Use speech mode (16 kHz, exponential mapping)",
     )
     parser.add_argument(
-        "--model", default=None,
+        "--model",
+        default=None,
         help="Path to SVR model file (Audio mode only)",
     )
     parser.add_argument(
-        "--search_window", type=int, default=60,
+        "--search_window",
+        type=int,
+        default=60,
         help="Search window radius (default: 60)",
     )
     parser.add_argument(
-        "--unscaled_speech", action="store_true",
+        "--unscaled_speech",
+        action="store_true",
         help="Don't scale speech MOS to max 5.0",
     )
     parser.add_argument(
-        "--no_alignment", action="store_true",
+        "--no_alignment",
+        action="store_true",
         help="Disable global alignment",
     )
     parser.add_argument(
-        "--no_realignment", action="store_true",
+        "--no_realignment",
+        action="store_true",
         help="Disable fine realignment",
     )
     parser.add_argument(
-        "--verbose", "-v", action="store_true",
+        "--verbose",
+        "-v",
+        action="store_true",
         help="Enable verbose output",
     )
 
@@ -105,9 +118,12 @@ def main() -> None:
         for i, p in enumerate(result.patch_sims):
             logger.info(
                 "  Patch %d: sim=%.4f ref=[%.3f-%.3f] deg=[%.3f-%.3f]",
-                i, p.similarity,
-                p.ref_patch_start_time, p.ref_patch_end_time,
-                p.deg_patch_start_time, p.deg_patch_end_time,
+                i,
+                p.similarity,
+                p.ref_patch_start_time,
+                p.ref_patch_end_time,
+                p.deg_patch_start_time,
+                p.deg_patch_end_time,
             )
 
 

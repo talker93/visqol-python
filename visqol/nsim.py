@@ -10,23 +10,25 @@ Corresponds to C++ files:
 
 from __future__ import annotations
 
-import numpy as np
-from numpy.typing import NDArray
 from dataclasses import dataclass, field
 
+import numpy as np
+from numpy.typing import NDArray
 
 # 3×3 Gaussian window weights (hardcoded from C++)
-GAUSSIAN_WINDOW: NDArray[np.float64] = np.array([
-    [0.0113033910173052, 0.0838251475442633, 0.0113033910173052],
-    [0.0838251475442633, 0.619485845753726,  0.0838251475442633],
-    [0.0113033910173052, 0.0838251475442633, 0.0113033910173052],
-])
+GAUSSIAN_WINDOW: NDArray[np.float64] = np.array(
+    [
+        [0.0113033910173052, 0.0838251475442633, 0.0113033910173052],
+        [0.0838251475442633, 0.619485845753726, 0.0838251475442633],
+        [0.0113033910173052, 0.0838251475442633, 0.0113033910173052],
+    ]
+)
 
 # Constants for NSIM calculation
 INTENSITY_RANGE: float = 1.0
 K1: float = 0.01
 K2: float = 0.03
-C1: float = (K1 * INTENSITY_RANGE) ** 2   # = 0.0001
+C1: float = (K1 * INTENSITY_RANGE) ** 2  # = 0.0001
 C3: float = (K2 * INTENSITY_RANGE) ** 2 / 2.0  # = 0.00045
 
 
@@ -35,15 +37,9 @@ class PatchSimilarityResult:
     """Result of comparing a reference patch with a degraded patch."""
 
     similarity: float = 0.0
-    freq_band_means: NDArray[np.float64] = field(
-        default_factory=lambda: np.array([])
-    )
-    freq_band_stddevs: NDArray[np.float64] = field(
-        default_factory=lambda: np.array([])
-    )
-    freq_band_deg_energy: NDArray[np.float64] = field(
-        default_factory=lambda: np.array([])
-    )
+    freq_band_means: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    freq_band_stddevs: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    freq_band_deg_energy: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
 
     # Timing info
     ref_patch_start_time: float = 0.0

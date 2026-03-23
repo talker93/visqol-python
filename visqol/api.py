@@ -10,15 +10,16 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
 
 from visqol.audio_utils import AudioSignal
-from visqol.visqol_manager import VisqolManager
 from visqol.visqol_core import SimilarityResult
+from visqol.visqol_manager import VisqolManager
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class VisqolApi:
     def create(
         self,
         mode: str = "audio",
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         search_window: int = 60,
         use_unscaled_speech: bool = False,
         disable_global_alignment: bool = False,
@@ -79,14 +80,10 @@ class VisqolApi:
         """
         mode_lower = mode.lower()
         if mode_lower not in _VALID_MODES:
-            raise ValueError(
-                f"Invalid mode {mode!r}. Must be one of {sorted(_VALID_MODES)}."
-            )
+            raise ValueError(f"Invalid mode {mode!r}. Must be one of {sorted(_VALID_MODES)}.")
 
         if search_window <= 0:
-            raise ValueError(
-                f"search_window must be a positive integer, got {search_window}."
-            )
+            raise ValueError(f"search_window must be a positive integer, got {search_window}.")
 
         use_speech_mode = mode_lower == "speech"
 
@@ -94,9 +91,7 @@ class VisqolApi:
             model_path = _DEFAULT_SVR_MODEL
 
         if model_path is not None and not os.path.isfile(model_path):
-            raise FileNotFoundError(
-                f"SVR model file not found: {model_path}"
-            )
+            raise FileNotFoundError(f"SVR model file not found: {model_path}")
 
         # Store kwargs for batch mode (subprocess recreation)
         self._create_kwargs = {
@@ -160,21 +155,15 @@ class VisqolApi:
         self._ensure_created()
 
         if not isinstance(ref_array, np.ndarray):
-            raise TypeError(
-                f"ref_array must be a numpy array, got {type(ref_array).__name__}"
-            )
+            raise TypeError(f"ref_array must be a numpy array, got {type(ref_array).__name__}")
         if not isinstance(deg_array, np.ndarray):
-            raise TypeError(
-                f"deg_array must be a numpy array, got {type(deg_array).__name__}"
-            )
+            raise TypeError(f"deg_array must be a numpy array, got {type(deg_array).__name__}")
         if ref_array.size == 0:
             raise ValueError("ref_array must not be empty.")
         if deg_array.size == 0:
             raise ValueError("deg_array must not be empty.")
         if sample_rate <= 0:
-            raise ValueError(
-                f"sample_rate must be a positive integer, got {sample_rate}."
-            )
+            raise ValueError(f"sample_rate must be a positive integer, got {sample_rate}.")
 
         ref_signal = AudioSignal(ref_array, sample_rate)
         deg_signal = AudioSignal(deg_array, sample_rate)
@@ -182,28 +171,61 @@ class VisqolApi:
 
     def measure_batch(
         self,
-        file_pairs: Sequence[Tuple[str, str]],
+        file_pairs: Sequence[tuple[str, str]],
         *,
-        progress_callback: Optional[ProgressCallback] = None,
-    ) -> List[Union[SimilarityResult, Exception]]:
+        max_workers: int | None = None,
+        parallel: bool = True,
+        progress_callback: ProgressCallback | None = None,
+    ) -> list[SimilarityResult | Exception]:
         """
-        Evaluate multiple file pairs sequentially.
+        Evaluate multiple file pairs, optionally in parallel.
+
+        When *parallel* is ``True`` (the default), evaluation is distributed
+        across multiple **processes** via :class:`ProcessPoolExecutor`.  Each
+        worker recreates its own ``VisqolManager`` from the same configuration
+        so there is **zero** shared state and no GIL contention.
 
         Args:
             file_pairs: Sequence of ``(ref_path, deg_path)`` tuples.
+            max_workers: Maximum number of worker processes.  *None* means
+                ``min(len(file_pairs), os.cpu_count())``.  Ignored when
+                *parallel* is ``False``.
+            parallel: If ``False``, fall back to sequential evaluation
+                (useful for debugging or when multiprocessing is unavailable).
             progress_callback: Optional ``(completed, total) -> None`` callback
                 invoked after each pair is processed.
 
         Returns:
             List of :class:`SimilarityResult` (on success) or :class:`Exception`
-            (on failure) for each pair, in the same order as *file_pairs*.
+            (on failure) for each pair, **in the same order** as *file_pairs*.
 
         Raises:
             RuntimeError: If :meth:`create` has not been called.
         """
         self._ensure_created()
         total = len(file_pairs)
-        results: List[Union[SimilarityResult, Exception]] = []
+
+        if not parallel or total <= 1:
+            return self._measure_batch_sequential(file_pairs, progress_callback)
+
+        return self._measure_batch_parallel(
+            file_pairs,
+            max_workers,
+            progress_callback,
+        )
+
+    # ------------------------------------------------------------------
+    # Batch helpers
+    # ------------------------------------------------------------------
+
+    def _measure_batch_sequential(
+        self,
+        file_pairs: Sequence[tuple[str, str]],
+        progress_callback: ProgressCallback | None = None,
+    ) -> list[SimilarityResult | Exception]:
+        """Evaluate file pairs one by one (original behaviour)."""
+        total = len(file_pairs)
+        results: list[SimilarityResult | Exception] = []
 
         for idx, (ref_path, deg_path) in enumerate(file_pairs):
             try:
@@ -212,10 +234,65 @@ class VisqolApi:
             except Exception as exc:
                 results.append(exc)
                 logger.warning(
-                    "Pair %d/%d failed: %s", idx + 1, total, exc,
+                    "Pair %d/%d failed: %s",
+                    idx + 1,
+                    total,
+                    exc,
                 )
             if progress_callback is not None:
                 progress_callback(idx + 1, total)
+
+        return results
+
+    def _measure_batch_parallel(
+        self,
+        file_pairs: Sequence[tuple[str, str]],
+        max_workers: int | None,
+        progress_callback: ProgressCallback | None = None,
+    ) -> list[SimilarityResult | Exception]:
+        """Evaluate file pairs in parallel using ProcessPoolExecutor."""
+        total = len(file_pairs)
+
+        if max_workers is None:
+            cpu_count = os.cpu_count() or 1
+            max_workers = min(total, cpu_count)
+
+        # We pickle the create_kwargs so each worker can build its own manager.
+        create_kwargs = self._create_kwargs
+
+        results: list[SimilarityResult | Exception] = [
+            RuntimeError("not yet evaluated")
+        ] * total
+
+        completed = 0
+
+        with ProcessPoolExecutor(max_workers=max_workers) as pool:
+            # Submit all futures and track their original index.
+            future_to_idx = {}
+            for idx, (ref_path, deg_path) in enumerate(file_pairs):
+                future = pool.submit(
+                    _worker_measure,
+                    create_kwargs,
+                    ref_path,
+                    deg_path,
+                )
+                future_to_idx[future] = idx
+
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as exc:
+                    results[idx] = exc
+                    logger.warning(
+                        "Pair %d/%d failed: %s",
+                        idx + 1,
+                        total,
+                        exc,
+                    )
+                completed += 1
+                if progress_callback is not None:
+                    progress_callback(completed, total)
 
         return results
 
@@ -226,6 +303,44 @@ class VisqolApi:
     def _ensure_created(self) -> None:
         """Raise if :meth:`create` has not been called."""
         if not self._is_created:
-            raise RuntimeError(
-                "VisqolApi must be created (call .create()) before measuring."
-            )
+            raise RuntimeError("VisqolApi must be created (call .create()) before measuring.")
+
+
+# =====================================================================
+# Module-level worker function for multiprocessing (must be picklable)
+# =====================================================================
+
+
+def _worker_measure(
+    create_kwargs: dict[str, object],
+    ref_path: str,
+    deg_path: str,
+) -> SimilarityResult:
+    """
+    Evaluate a single file pair in a worker process.
+
+    Each worker lazily creates its own ``VisqolManager`` on first call
+    (stored in a global to reuse across tasks in the same process).
+    """
+    global _worker_manager
+
+    try:
+        mgr = _worker_manager
+    except NameError:
+        mgr = None
+
+    if mgr is None:
+        mgr = VisqolManager()
+        mgr.init(**create_kwargs)  # type: ignore[arg-type]
+        _worker_manager = mgr
+
+    ref_signal = __import__("visqol.audio_utils", fromlist=["load_as_mono"]).load_as_mono(
+        ref_path
+    )
+    deg_signal = __import__("visqol.audio_utils", fromlist=["load_as_mono"]).load_as_mono(
+        deg_path
+    )
+    return mgr.run_from_signals(ref_signal, deg_signal)
+
+
+_worker_manager: VisqolManager | None = None

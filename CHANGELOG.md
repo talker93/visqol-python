@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.4.0] - 2026-03-23
+
+### Added
+- **Numba JIT acceleration** (`pip install visqol-python[accel]`):
+  - DP patch matching inner loops compiled to machine code via `@njit`
+  - Gammatone IIR filterbank compiled with `parallel=True` + `fastmath=True` — frames processed in parallel across all CPU cores
+  - NSIM similarity kernel JIT-compiled
+  - Automatic `NUMBA_THREADING_LAYER=workqueue` setup for macOS compatibility
+  - Zero-loss parallel accuracy (each frame's IIR state is independent)
+- **Batch evaluation API**: `VisqolApi.measure_batch()` with optional `parallel=True` and `max_workers` for multi-process execution
+- Exported `PatchSimilarityResult` and `ProgressCallback` from top-level package
+
+### Performance
+- **12x Gammatone speedup** via parallel + fastmath (1.53s → 0.13s per signal pair)
+- **8.7x DP patch matching speedup** via Numba JIT (3.5s → 0.40s)
+- **Overall 9x speedup**: RTF 0.58 → 0.064 (surpasses C++ estimate of 0.093)
+- Fine alignment skip optimization: 29x speedup when lag == 0
+
+### Improved
+- `__repr__` / `__str__` for `SimilarityResult`, `AudioSignal`, `PatchSimilarityResult`, `Spectrogram`
+- Logging replaces print statements in CLI verbose output
+- Development tooling: ruff lint/format + mypy strict type checking in CI
+
+### Fixed
+- **CI failures**: resolved all ruff lint (308 errors), ruff format (24 files), and mypy (24 errors) issues
+- Added `per-file-ignores` for benchmark test scripts (E402, E702)
+- Added mypy override for `numba_accel.py` (untyped `@njit` decorators)
+- Fixed `no-any-return` errors across `audio_utils.py`, `gammatone.py`, `visqol_core.py`, `api.py`
+- Added `TYPE_CHECKING` imports for `ImagePatchCreator` / `VadPatchCreator` in `visqol_core.py`
+
+## [3.3.6] - 2026-03-23
+
+### Added
+- **Batch evaluation API**: `VisqolApi.measure_batch()` with `progress_callback` support
+- **Numba optional acceleration**: `visqol/numba_accel.py` with JIT-compiled DP forward pass and NSIM kernel
+- `[accel]` optional dependency group: `pip install visqol-python[accel]`
+
+### Improved
+- `GammatoneFilterBank.apply_filter()` pre-builds coefficient arrays (avoids per-channel allocation)
+- `prepare_spectrograms_for_comparison()` vectorized per-frame noise floor
+- Ruff lint/format configuration added to `pyproject.toml`
+- CI enhanced with lint and type-check jobs
+- Development dependencies: `[project.optional-dependencies] dev`
+
 ## [3.3.5] - 2026-03-23
 
 ### Added
@@ -49,6 +93,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Bundled SVR model (`libsvm_nu_svr_model.txt`)
 - GitHub Actions workflow for auto-publish to PyPI via Trusted Publisher
 
+[3.4.0]: https://github.com/talker93/visqol-python/compare/v3.3.6...v3.4.0
 [3.3.6]: https://github.com/talker93/visqol-python/compare/v3.3.5...v3.3.6
 [3.3.5]: https://github.com/talker93/visqol-python/compare/v3.3.4...v3.3.5
 [3.3.4]: https://github.com/talker93/visqol-python/compare/v3.3.3...v3.3.4

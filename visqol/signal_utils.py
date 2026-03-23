@@ -46,8 +46,8 @@ def find_best_lag(ref: NDArray[np.float64], deg: NDArray[np.float64]) -> int:
     n = max(len(ref), len(deg))
     ref_padded = np.zeros(n)
     deg_padded = np.zeros(n)
-    ref_padded[:len(ref)] = ref
-    deg_padded[:len(deg)] = deg
+    ref_padded[: len(ref)] = ref
+    deg_padded[: len(deg)] = deg
 
     # FFT-based cross-correlation
     # fft_points = next power of 2 >= 2*n - 1
@@ -62,7 +62,7 @@ def find_best_lag(ref: NDArray[np.float64], deg: NDArray[np.float64]) -> int:
 
     # Build correlation vector: [negative lags, positive lags]
     neg_corrs = xcorr_full[-max_lag:].tolist()
-    pos_corrs = xcorr_full[:max_lag + 1].tolist()
+    pos_corrs = xcorr_full[: max_lag + 1].tolist()
     corrs = neg_corrs + pos_corrs
 
     best_idx = int(np.argmax(corrs))

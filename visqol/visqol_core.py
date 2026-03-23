@@ -7,25 +7,28 @@ Corresponds to C++ file: visqol.cc
 from __future__ import annotations
 
 import math
-from typing import List, Union
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
-from dataclasses import dataclass, field
 
-from visqol.audio_utils import AudioSignal, scale_to_match_sound_pressure_level
 from visqol.analysis_window import AnalysisWindow
+from visqol.audio_utils import AudioSignal, scale_to_match_sound_pressure_level
 from visqol.gammatone import (
     GammatoneSpectrogramBuilder,
     Spectrogram,
     prepare_spectrograms_for_comparison,
 )
-from visqol.nsim import PatchSimilarityResult, measure_patch_similarity
+from visqol.nsim import PatchSimilarityResult
 from visqol.patch_selector import (
     find_most_optimal_deg_patches,
     finely_align_and_recreate_patches,
 )
 from visqol.quality_mapper import SimilarityToQualityMapper
+
+if TYPE_CHECKING:
+    from visqol.patch_creator import ImagePatchCreator, VadPatchCreator
 
 
 @dataclass
@@ -38,10 +41,8 @@ class SimilarityResult:
     fvnsim10: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     fstdnsim: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
     fvdegenergy: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
-    center_freq_bands: NDArray[np.float64] = field(
-        default_factory=lambda: np.array([])
-    )
-    patch_sims: List[PatchSimilarityResult] = field(default_factory=list)
+    center_freq_bands: NDArray[np.float64] = field(default_factory=lambda: np.array([]))
+    patch_sims: list[PatchSimilarityResult] = field(default_factory=list)
 
     def __str__(self) -> str:
         return f"SimilarityResult(moslqo={self.moslqo:.4f}, vnsim={self.vnsim:.4f})"
@@ -60,7 +61,7 @@ class SimilarityResult:
 
 
 def calc_per_patch_mean_freq_band_means(
-    sim_results: List[PatchSimilarityResult],
+    sim_results: list[PatchSimilarityResult],
 ) -> NDArray[np.float64]:
     """
     Mean of per-frequency-band means across all patches (``fvnsim``).
@@ -68,11 +69,11 @@ def calc_per_patch_mean_freq_band_means(
     Matches C++ ``Visqol::CalcPerPatchMeanFreqBandMeans``.
     """
     all_means = np.array([r.freq_band_means for r in sim_results])
-    return np.mean(all_means, axis=0)
+    return np.asarray(np.mean(all_means, axis=0), dtype=np.float64)
 
 
 def calc_per_patch_freq_band_quantile(
-    sim_results: List[PatchSimilarityResult],
+    sim_results: list[PatchSimilarityResult],
     quantile: float = 0.10,
 ) -> NDArray[np.float64]:
     """
@@ -92,7 +93,7 @@ def calc_per_patch_freq_band_quantile(
 
 
 def calc_per_patch_mean_freq_band_deg_energy(
-    sim_results: List[PatchSimilarityResult],
+    sim_results: list[PatchSimilarityResult],
 ) -> NDArray[np.float64]:
     """
     Mean of per-frequency-band degraded energy across patches (``fvdegenergy``).
@@ -100,11 +101,11 @@ def calc_per_patch_mean_freq_band_deg_energy(
     Matches C++ ``Visqol::CalcPerPatchMeanFreqBandDegradedEnergy``.
     """
     all_energy = np.array([r.freq_band_deg_energy for r in sim_results])
-    return np.mean(all_energy, axis=0)
+    return np.asarray(np.mean(all_energy, axis=0), dtype=np.float64)
 
 
 def calc_per_patch_mean_freq_band_stddevs(
-    sim_results: List[PatchSimilarityResult],
+    sim_results: list[PatchSimilarityResult],
     frame_duration: float,
 ) -> NDArray[np.float64]:
     """
@@ -125,7 +126,7 @@ def calc_per_patch_mean_freq_band_stddevs(
 
     for patch in sim_results:
         secs_in_patch: float = patch.ref_patch_end_time - patch.ref_patch_start_time
-        frame_count = int(math.ceil(secs_in_patch / frame_duration))
+        frame_count = math.ceil(secs_in_patch / frame_duration)
         total_frame_count += frame_count
 
         for band in range(num_freq_bands):
@@ -137,9 +138,7 @@ def calc_per_patch_mean_freq_band_stddevs(
     if total_frame_count <= 1:
         return np.zeros(num_freq_bands)
 
-    variance = (contribution - fvnsim * fvnsim * total_frame_count) / (
-        total_frame_count - 1
-    )
+    variance = (contribution - fvnsim * fvnsim * total_frame_count) / (total_frame_count - 1)
 
     # sqrt, filtering negative values due to floating-point precision
     with np.errstate(invalid="ignore"):
@@ -181,7 +180,7 @@ class VisqolCore:
         deg_signal: AudioSignal,
         spect_builder: GammatoneSpectrogramBuilder,
         window: AnalysisWindow,
-        patch_creator: Union["ImagePatchCreator", "VadPatchCreator"],  # noqa: F821
+        patch_creator: ImagePatchCreator | VadPatchCreator,
         search_window: int,
         quality_mapper: SimilarityToQualityMapper,
         disable_realignment: bool = False,
@@ -211,9 +210,7 @@ class VisqolCore:
         deg_spectrogram: Spectrogram = spect_builder.build(deg_signal, window)
 
         # Prepare spectrograms for comparison (dB conversion + noise floor)
-        ref_db, deg_db = prepare_spectrograms_for_comparison(
-            ref_spectrogram, deg_spectrogram
-        )
+        ref_db, deg_db = prepare_spectrograms_for_comparison(ref_spectrogram, deg_spectrogram)
 
         # Stage 2: Feature selection and similarity measure
         ref_patch_indices: list[int] = patch_creator.create_ref_patch_indices(
@@ -224,34 +221,44 @@ class VisqolCore:
             int(window.size * window.overlap), ref_signal.sample_rate
         )
 
-        ref_patches: list[NDArray[np.float64]] = (
-            patch_creator.create_patches_from_indices(ref_db, ref_patch_indices)
+        ref_patches: list[NDArray[np.float64]] = patch_creator.create_patches_from_indices(
+            ref_db, ref_patch_indices
         )
 
         # DP patch matching
-        sim_match_info: List[PatchSimilarityResult] = find_most_optimal_deg_patches(
-            ref_patches, ref_patch_indices, deg_db,
-            frame_duration, search_window,
+        sim_match_info: list[PatchSimilarityResult] = find_most_optimal_deg_patches(
+            ref_patches,
+            ref_patch_indices,
+            deg_db,
+            frame_duration,
+            search_window,
         )
 
         # Fine realignment
         if not disable_realignment:
             sim_match_info = finely_align_and_recreate_patches(
-                sim_match_info, ref_signal, deg_signal,
-                spect_builder, window,
+                sim_match_info,
+                ref_signal,
+                deg_signal,
+                spect_builder,
+                window,
             )
 
         # Aggregate statistics
         fvnsim = calc_per_patch_mean_freq_band_means(sim_match_info)
         fvnsim10 = calc_per_patch_freq_band_quantile(sim_match_info, 0.10)
         fstdnsim = calc_per_patch_mean_freq_band_stddevs(
-            sim_match_info, frame_duration,
+            sim_match_info,
+            frame_duration,
         )
         fvdegenergy = calc_per_patch_mean_freq_band_deg_energy(sim_match_info)
 
         # Predict MOS
         moslqo: float = quality_mapper.predict_quality(
-            fvnsim, fvnsim10, fstdnsim, fvdegenergy,
+            fvnsim,
+            fvnsim10,
+            fstdnsim,
+            fvdegenergy,
         )
 
         # Calculate vnsim (mean of fvnsim)

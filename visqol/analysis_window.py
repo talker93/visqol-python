@@ -43,7 +43,7 @@ class AnalysisWindow:
 
         self.window_duration: float = window_duration
         self.overlap: float = overlap
-        self.size: int = int(round(sample_rate * window_duration))
+        self.size: int = round(sample_rate * window_duration)
         self._hann_window: NDArray[np.float64] | None = None
 
     @property
@@ -57,9 +57,7 @@ class AnalysisWindow:
         if self._hann_window is None:
             # Match C++ exactly: 0.5 − 0.5 * cos(2π i / (size − 1))
             n = self.size
-            self._hann_window = 0.5 - 0.5 * np.cos(
-                2.0 * np.pi * np.arange(n) / (n - 1)
-            )
+            self._hann_window = 0.5 - 0.5 * np.cos(2.0 * np.pi * np.arange(n) / (n - 1))
         return self._hann_window
 
     def apply_hann_window(self, frame: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -70,7 +68,6 @@ class AnalysisWindow:
         """
         if len(frame) != self.size:
             raise ValueError(
-                f"Frame length ({len(frame)}) does not match "
-                f"window size ({self.size})."
+                f"Frame length ({len(frame)}) does not match window size ({self.size})."
             )
         return frame * self.hann_window
