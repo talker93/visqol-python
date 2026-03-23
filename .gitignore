@@ -7,6 +7,12 @@ __pycache__/
 dist/
 build/
 .eggs/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
 
 # C extensions
 *.so
@@ -17,6 +23,10 @@ build/
 .vscode/
 *.swp
 *.swo
+
+# Type checking / linting
+.mypy_cache/
+.ruff_cache/
 
 # OS
 .DS_Store

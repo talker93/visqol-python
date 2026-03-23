@@ -53,6 +53,16 @@ class AudioSignal:
     def __len__(self) -> int:
         return len(self.data)
 
+    def __repr__(self) -> str:
+        return (
+            f"AudioSignal(samples={self.num_samples}, "
+            f"sample_rate={self.sample_rate}, "
+            f"duration={self.duration:.3f}s)"
+        )
+
+    def __str__(self) -> str:
+        return f"AudioSignal({self.duration:.3f}s @ {self.sample_rate} Hz)"
+
 
 def load_audio(path: str) -> Tuple[NDArray[np.float64], int]:
     """

@@ -7,7 +7,13 @@ These tests verify basic API functionality without requiring external testdata.
 import numpy as np
 import pytest
 
-from visqol import VisqolApi, SimilarityResult, AudioSignal
+from visqol import (
+    AudioSignal,
+    PatchSimilarityResult,
+    ProgressCallback,
+    SimilarityResult,
+    VisqolApi,
+)
 
 
 # ── API creation ──
@@ -147,6 +153,91 @@ class TestResultFields:
         assert hasattr(result, "patch_sims")
 
 
+# ── __repr__ / __str__ ──
+
+
+class TestReprStr:
+    """Test readable string representations."""
+
+    def test_audio_signal_repr(self):
+        sig = AudioSignal(np.zeros(16000), 16000)
+        r = repr(sig)
+        assert "AudioSignal" in r
+        assert "16000" in r
+        assert "1.000" in r
+
+    def test_audio_signal_str(self):
+        sig = AudioSignal(np.zeros(48000), 48000)
+        s = str(sig)
+        assert "1.000s" in s
+        assert "48000" in s
+
+    def test_similarity_result_str(self):
+        res = SimilarityResult(moslqo=4.5, vnsim=0.95)
+        s = str(res)
+        assert "4.5" in s
+        assert "0.95" in s
+
+    def test_similarity_result_repr(self):
+        res = SimilarityResult(moslqo=4.5, vnsim=0.95)
+        r = repr(res)
+        assert "SimilarityResult" in r
+        assert "moslqo" in r
+
+    def test_patch_similarity_result_str(self):
+        p = PatchSimilarityResult(similarity=0.85)
+        s = str(p)
+        assert "0.85" in s
+
+    def test_patch_similarity_result_repr(self):
+        p = PatchSimilarityResult(similarity=0.85)
+        r = repr(p)
+        assert "PatchSimilarityResult" in r
+
+
+# ── measure_batch ──
+
+
+class TestMeasureBatch:
+    """Test batch evaluation API."""
+
+    def test_batch_before_create_raises(self):
+        api = VisqolApi()
+        with pytest.raises(RuntimeError, match="create"):
+            api.measure_batch([("/a.wav", "/b.wav")])
+
+    def test_batch_nonexistent_files_returns_exceptions(self):
+        api = VisqolApi()
+        api.create(mode="speech")
+        results = api.measure_batch([
+            ("/nonexistent/a.wav", "/nonexistent/b.wav"),
+            ("/nonexistent/c.wav", "/nonexistent/d.wav"),
+        ])
+        assert len(results) == 2
+        assert all(isinstance(r, Exception) for r in results)
+
+    def test_batch_progress_callback(self):
+        api = VisqolApi()
+        api.create(mode="speech")
+        progress_log: list[tuple[int, int]] = []
+
+        def cb(done: int, total: int) -> None:
+            progress_log.append((done, total))
+
+        results = api.measure_batch(
+            [("/nonexistent/a.wav", "/nonexistent/b.wav")],
+            progress_callback=cb,
+        )
+        assert len(results) == 1
+        assert progress_log == [(1, 1)]
+
+    def test_batch_empty(self):
+        api = VisqolApi()
+        api.create(mode="speech")
+        results = api.measure_batch([])
+        assert results == []
+
+
 # ── Package metadata ──
 
 
@@ -166,3 +257,5 @@ class TestVersion:
         assert hasattr(visqol, "VisqolApi")
         assert hasattr(visqol, "SimilarityResult")
         assert hasattr(visqol, "AudioSignal")
+        assert hasattr(visqol, "PatchSimilarityResult")
+        assert hasattr(visqol, "ProgressCallback")

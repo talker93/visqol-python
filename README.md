@@ -69,6 +69,33 @@ result = api.measure_from_arrays(ref, deg, sample_rate=sr)
 print(f"MOS-LQO: {result.moslqo:.4f}")
 ```
 
+### Batch Evaluation
+
+```python
+from visqol import VisqolApi
+
+api = VisqolApi()
+api.create(mode="audio")
+
+file_pairs = [
+    ("ref1.wav", "deg1.wav"),
+    ("ref2.wav", "deg2.wav"),
+    ("ref3.wav", "deg3.wav"),
+]
+
+# Optional progress callback
+results = api.measure_batch(
+    file_pairs,
+    progress_callback=lambda done, total: print(f"{done}/{total}"),
+)
+
+for pair, result in zip(file_pairs, results):
+    if isinstance(result, Exception):
+        print(f"{pair}: FAILED — {result}")
+    else:
+        print(f"{pair}: MOS-LQO = {result.moslqo:.4f}")
+```
+
 ### Command Line
 
 ```bash

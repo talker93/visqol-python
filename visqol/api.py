@@ -8,8 +8,10 @@ Corresponds to C++ file: visqol_api.cc
 
 from __future__ import annotations
 
+import logging
 import os
-from typing import Optional
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -18,12 +20,17 @@ from visqol.audio_utils import AudioSignal
 from visqol.visqol_manager import VisqolManager
 from visqol.visqol_core import SimilarityResult
 
+logger = logging.getLogger(__name__)
+
 # Valid mode names
 _VALID_MODES = frozenset({"audio", "speech"})
 
 # Default SVR model path (bundled inside the package)
 _DEFAULT_MODEL_DIR: str = os.path.join(os.path.dirname(__file__), "model")
 _DEFAULT_SVR_MODEL: str = os.path.join(_DEFAULT_MODEL_DIR, "libsvm_nu_svr_model.txt")
+
+# Type alias for progress callback: (completed_count, total_count) -> None
+ProgressCallback = Callable[[int, int], None]
 
 
 class VisqolApi:
@@ -41,6 +48,7 @@ class VisqolApi:
     def __init__(self) -> None:
         self._manager: VisqolManager = VisqolManager()
         self._is_created: bool = False
+        self._create_kwargs: dict[str, object] = {}
 
     def create(
         self,
@@ -90,14 +98,17 @@ class VisqolApi:
                 f"SVR model file not found: {model_path}"
             )
 
-        self._manager.init(
-            model_path=model_path or "",
-            use_speech_mode=use_speech_mode,
-            use_unscaled_speech=use_unscaled_speech,
-            search_window=search_window,
-            disable_global_alignment=disable_global_alignment,
-            disable_realignment=disable_realignment,
-        )
+        # Store kwargs for batch mode (subprocess recreation)
+        self._create_kwargs = {
+            "model_path": model_path or "",
+            "use_speech_mode": use_speech_mode,
+            "use_unscaled_speech": use_unscaled_speech,
+            "search_window": search_window,
+            "disable_global_alignment": disable_global_alignment,
+            "disable_realignment": disable_realignment,
+        }
+
+        self._manager.init(**self._create_kwargs)  # type: ignore[arg-type]
         self._is_created = True
 
     def measure(self, ref_path: str, deg_path: str) -> SimilarityResult:
@@ -168,6 +179,45 @@ class VisqolApi:
         ref_signal = AudioSignal(ref_array, sample_rate)
         deg_signal = AudioSignal(deg_array, sample_rate)
         return self._manager.run_from_signals(ref_signal, deg_signal)
+
+    def measure_batch(
+        self,
+        file_pairs: Sequence[Tuple[str, str]],
+        *,
+        progress_callback: Optional[ProgressCallback] = None,
+    ) -> List[Union[SimilarityResult, Exception]]:
+        """
+        Evaluate multiple file pairs sequentially.
+
+        Args:
+            file_pairs: Sequence of ``(ref_path, deg_path)`` tuples.
+            progress_callback: Optional ``(completed, total) -> None`` callback
+                invoked after each pair is processed.
+
+        Returns:
+            List of :class:`SimilarityResult` (on success) or :class:`Exception`
+            (on failure) for each pair, in the same order as *file_pairs*.
+
+        Raises:
+            RuntimeError: If :meth:`create` has not been called.
+        """
+        self._ensure_created()
+        total = len(file_pairs)
+        results: List[Union[SimilarityResult, Exception]] = []
+
+        for idx, (ref_path, deg_path) in enumerate(file_pairs):
+            try:
+                result = self.measure(ref_path, deg_path)
+                results.append(result)
+            except Exception as exc:
+                results.append(exc)
+                logger.warning(
+                    "Pair %d/%d failed: %s", idx + 1, total, exc,
+                )
+            if progress_callback is not None:
+                progress_callback(idx + 1, total)
+
+        return results
 
     # ------------------------------------------------------------------
     # Private helpers

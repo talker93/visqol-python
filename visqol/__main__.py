@@ -9,10 +9,12 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import sys
 import logging
+import sys
 
 from visqol.api import VisqolApi
+
+logger = logging.getLogger("visqol")
 
 
 def main() -> None:
@@ -61,7 +63,11 @@ def main() -> None:
 
     # Setup logging
     level = logging.DEBUG if args.verbose else logging.WARNING
-    logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
+    logging.basicConfig(
+        level=level,
+        format="%(levelname)s: %(message)s",
+        stream=sys.stderr,
+    )
 
     # Run ViSQOL
     mode: str = "speech" if args.speech_mode else "audio"
@@ -79,30 +85,29 @@ def main() -> None:
 
         result = api.measure(args.reference, args.degraded)
 
-    except FileNotFoundError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        logger.error("%s", exc)
         sys.exit(1)
-    except ValueError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
-    except RuntimeError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    except Exception as exc:
+        logger.error("Unexpected error: %s", exc)
+        sys.exit(2)
 
     # Output results
     print(f"MOS-LQO:      {result.moslqo:.6f}")
     print(f"VNSIM:        {result.vnsim:.6f}")
+
     if args.verbose:
-        print(f"FVNSIM:       {result.fvnsim}")
-        print(f"FVNSIM10:     {result.fvnsim10}")
-        print(f"FSTDNSIM:     {result.fstdnsim}")
-        print(f"FVDEGENERGY:  {result.fvdegenergy}")
-        print(f"Patches:      {len(result.patch_sims)}")
+        logger.info("FVNSIM:       %s", result.fvnsim)
+        logger.info("FVNSIM10:     %s", result.fvnsim10)
+        logger.info("FSTDNSIM:     %s", result.fstdnsim)
+        logger.info("FVDEGENERGY:  %s", result.fvdegenergy)
+        logger.info("Patches:      %d", len(result.patch_sims))
         for i, p in enumerate(result.patch_sims):
-            print(
-                f"  Patch {i}: sim={p.similarity:.4f} "
-                f"ref=[{p.ref_patch_start_time:.3f}-{p.ref_patch_end_time:.3f}] "
-                f"deg=[{p.deg_patch_start_time:.3f}-{p.deg_patch_end_time:.3f}]"
+            logger.info(
+                "  Patch %d: sim=%.4f ref=[%.3f-%.3f] deg=[%.3f-%.3f]",
+                i, p.similarity,
+                p.ref_patch_start_time, p.ref_patch_end_time,
+                p.deg_patch_start_time, p.deg_patch_end_time,
             )
 
 

@@ -51,6 +51,19 @@ class PatchSimilarityResult:
     deg_patch_start_time: float = 0.0
     deg_patch_end_time: float = 0.0
 
+    def __str__(self) -> str:
+        return (
+            f"PatchSimilarityResult(sim={self.similarity:.4f}, "
+            f"ref=[{self.ref_patch_start_time:.3f}-{self.ref_patch_end_time:.3f}], "
+            f"deg=[{self.deg_patch_start_time:.3f}-{self.deg_patch_end_time:.3f}])"
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"PatchSimilarityResult(similarity={self.similarity!r}, "
+            f"freq_band_means=<{len(self.freq_band_means)} bands>)"
+        )
+
 
 def _valid_2d_conv_with_boundary(
     kernel: NDArray[np.float64], matrix: NDArray[np.float64]

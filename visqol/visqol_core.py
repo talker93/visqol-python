@@ -43,6 +43,16 @@ class SimilarityResult:
     )
     patch_sims: List[PatchSimilarityResult] = field(default_factory=list)
 
+    def __str__(self) -> str:
+        return f"SimilarityResult(moslqo={self.moslqo:.4f}, vnsim={self.vnsim:.4f})"
+
+    def __repr__(self) -> str:
+        return (
+            f"SimilarityResult(moslqo={self.moslqo!r}, vnsim={self.vnsim!r}, "
+            f"fvnsim=<{len(self.fvnsim)} bands>, "
+            f"patch_sims=<{len(self.patch_sims)} patches>)"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Helper functions

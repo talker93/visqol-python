@@ -174,21 +174,6 @@ def make_erb_filters(
     return ErbFiltersResult(center_freqs=cf, filter_coeffs=filter_coeffs)
 
 
-def _iir_filter(
-    b: NDArray[np.float64],
-    a: NDArray[np.float64],
-    signal: NDArray[np.float64],
-    zi: NDArray[np.float64],
-) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """
-    Apply IIR filter (Direct Form II transposed).
-
-    Matches C++ ``SignalFilter::Filter``.
-    """
-    y, zf = lfilter(b, a, signal, zi=zi)
-    return y, zf
-
-
 class GammatoneFilterBank:
     """
     Gammatone filterbank that applies 4-stage cascaded IIR filtering.
@@ -226,9 +211,9 @@ class GammatoneFilterBank:
         """
         assert self._conditions is not None, "Call reset_conditions() first"
 
-        output = np.zeros((self.num_bands, len(signal)))
+        nb = self.num_bands
 
-        # Extract coefficient vectors
+        # Extract coefficient vectors (all bands at once)
         A0 = filter_coeffs[0]
         A11 = filter_coeffs[1]
         A12 = filter_coeffs[2]
@@ -240,36 +225,28 @@ class GammatoneFilterBank:
         B2 = filter_coeffs[8]
         gain = filter_coeffs[9]
 
-        for chan in range(self.num_bands):
-            # Stage 1: normalize by gain
-            a1_b = np.array([
-                A0[chan] / gain[chan],
-                A11[chan] / gain[chan],
-                A2[chan] / gain[chan],
-            ])
-            # Stage 2
-            a2_b = np.array([A0[chan], A12[chan], A2[chan]])
-            # Stage 3
-            a3_b = np.array([A0[chan], A13[chan], A2[chan]])
-            # Stage 4
-            a4_b = np.array([A0[chan], A14[chan], A2[chan]])
+        # Pre-build numerator arrays for all 4 stages × all channels
+        # Stage 1: normalize by gain
+        b1 = np.column_stack([A0 / gain, A11 / gain, A2 / gain])  # (nb, 3)
+        # Stage 2-4
+        b2 = np.column_stack([A0, A12, A2])  # (nb, 3)
+        b3 = np.column_stack([A0, A13, A2])  # (nb, 3)
+        b4 = np.column_stack([A0, A14, A2])  # (nb, 3)
 
-            # Denominator is the same for all 4 stages
-            denom = np.array([B0[chan], B1[chan], B2[chan]])
+        # Denominator is the same for all 4 stages (per channel)
+        denom = np.column_stack([B0, B1, B2])  # (nb, 3)
 
-            # 4-stage cascade
-            y, zf = lfilter(a1_b, denom, signal, zi=self._conditions[0][chan])
-            self._conditions[0][chan] = zf
+        # Process all channels with vectorised per-channel lfilter
+        output = np.empty((nb, len(signal)), dtype=np.float64)
+        stages_b = [b1, b2, b3, b4]
 
-            y, zf = lfilter(a2_b, denom, y, zi=self._conditions[1][chan])
-            self._conditions[1][chan] = zf
-
-            y, zf = lfilter(a3_b, denom, y, zi=self._conditions[2][chan])
-            self._conditions[2][chan] = zf
-
-            y, zf = lfilter(a4_b, denom, y, zi=self._conditions[3][chan])
-            self._conditions[3][chan] = zf
-
+        for chan in range(nb):
+            y = signal
+            for stage_idx, sb in enumerate(stages_b):
+                y, zf = lfilter(
+                    sb[chan], denom[chan], y, zi=self._conditions[stage_idx][chan],
+                )
+                self._conditions[stage_idx][chan] = zf
             output[chan] = y
 
         return output
@@ -302,6 +279,11 @@ class Spectrogram:
     @property
     def num_frames(self) -> int:
         return self.data.shape[1]
+
+    def __repr__(self) -> str:
+        return (
+            f"Spectrogram(bands={self.num_bands}, frames={self.num_frames})"
+        )
 
 
 def convert_to_db(matrix: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -343,16 +325,16 @@ def prepare_spectrograms_for_comparison(
     ref_db = np.maximum(ref_db, NOISE_FLOOR_ABSOLUTE_DB)
     deg_db = np.maximum(deg_db, NOISE_FLOOR_ABSOLUTE_DB)
 
-    # 3. Per-frame relative noise floor
+    # 3. Per-frame relative noise floor (vectorised)
     min_cols = min(ref_db.shape[1], deg_db.shape[1])
-    for i in range(min_cols):
-        our_max = np.max(ref_db[:, i])
-        other_max = np.max(deg_db[:, i])
-        any_max = max(float(our_max), float(other_max))
-        floor_db = any_max - NOISE_FLOOR_RELATIVE_TO_PEAK_DB
-
-        ref_db[:, i] = np.maximum(ref_db[:, i], floor_db)
-        deg_db[:, i] = np.maximum(deg_db[:, i], floor_db)
+    ref_view = ref_db[:, :min_cols]
+    deg_view = deg_db[:, :min_cols]
+    ref_max = np.max(ref_view, axis=0)  # (min_cols,)
+    deg_max = np.max(deg_view, axis=0)  # (min_cols,)
+    any_max = np.maximum(ref_max, deg_max)
+    floor_db = any_max - NOISE_FLOOR_RELATIVE_TO_PEAK_DB  # (min_cols,)
+    ref_db[:, :min_cols] = np.maximum(ref_view, floor_db[np.newaxis, :])
+    deg_db[:, :min_cols] = np.maximum(deg_view, floor_db[np.newaxis, :])
 
     # 4. Global normalization: subtract global minimum
     lowest = min(float(np.min(ref_db)), float(np.min(deg_db)))

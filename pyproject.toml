@@ -38,6 +38,11 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+    "mypy>=1.8",
+]
 
 [project.urls]
 Homepage = "https://github.com/talker93/visqol-python"
@@ -61,7 +66,31 @@ visqol = ["model/*.txt", "py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.ruff]
+target-version = "py39"
+line-length = 95
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.ruff.lint.isort]
+known-first-party = ["visqol"]
+
 [tool.mypy]
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["svmutil.*", "libsvm.*", "soundfile.*"]
+ignore_missing_imports = true

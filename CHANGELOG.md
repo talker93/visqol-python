@@ -49,5 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Bundled SVR model (`libsvm_nu_svr_model.txt`)
 - GitHub Actions workflow for auto-publish to PyPI via Trusted Publisher
 
+[3.3.6]: https://github.com/talker93/visqol-python/compare/v3.3.5...v3.3.6
+[3.3.5]: https://github.com/talker93/visqol-python/compare/v3.3.4...v3.3.5
 [3.3.4]: https://github.com/talker93/visqol-python/compare/v3.3.3...v3.3.4
 [3.3.3]: https://github.com/talker93/visqol-python/releases/tag/v3.3.3
