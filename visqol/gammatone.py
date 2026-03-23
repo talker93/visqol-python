@@ -275,11 +275,11 @@ class Spectrogram:
 
     @property
     def num_bands(self) -> int:
-        return self.data.shape[0]
+        return int(self.data.shape[0])
 
     @property
     def num_frames(self) -> int:
-        return self.data.shape[1]
+        return int(self.data.shape[1])
 
     def __repr__(self) -> str:
         return f"Spectrogram(bands={self.num_bands}, frames={self.num_frames})"
