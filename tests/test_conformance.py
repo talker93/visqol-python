@@ -1,16 +1,45 @@
 #!/usr/bin/env python3
-"""ViSQOL Python conformance tests."""
+"""
+ViSQOL Python conformance tests.
 
+Usage:
+    python tests/test_conformance.py --testdata /path/to/visqol/testdata
+
+The testdata directory should contain:
+    conformance_testdata_subset/  (audio test WAV files)
+    clean_speech/                 (speech test WAV files)
+
+You can obtain these from the official ViSQOL repository:
+    https://github.com/google/visqol
+"""
+
+import argparse
 import time
 import sys
 import os
 
-# Add parent dir for imports
-sys.path.insert(0, os.path.dirname(__file__))
+# Add project root for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from visqol.api import VisqolApi
 
-TD = os.path.join(os.path.dirname(__file__), '..', 'testdata')
+
+def _get_testdata_dir():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--testdata', default=None)
+    args, _ = parser.parse_known_args()
+    if args.testdata:
+        return args.testdata
+    # Fallback: look relative to this file (when inside the original visqol repo)
+    candidate = os.path.join(os.path.dirname(__file__), '..', '..', 'testdata')
+    if os.path.isdir(candidate):
+        return candidate
+    print("ERROR: testdata directory not found.")
+    print("Usage: python tests/test_conformance.py --testdata /path/to/visqol/testdata")
+    sys.exit(1)
+
+
+TD = _get_testdata_dir()
 CONF = os.path.join(TD, 'conformance_testdata_subset')
 SPEECH = os.path.join(TD, 'clean_speech')
 

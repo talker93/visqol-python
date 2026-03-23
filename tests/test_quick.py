@@ -1,10 +1,36 @@
 #!/usr/bin/env python3
-"""Quick ViSQOL conformance tests (subset)."""
-import time, sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+"""
+Quick ViSQOL conformance tests (subset of 3 audio + 1 speech).
+
+Usage:
+    python tests/test_quick.py --testdata /path/to/visqol/testdata
+"""
+import argparse
+import time
+import sys
+import os
+
+# Add project root for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from visqol.api import VisqolApi
 
-TD = os.path.join(os.path.dirname(__file__), '..', 'testdata')
+
+def _get_testdata_dir():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--testdata', default=None)
+    args, _ = parser.parse_known_args()
+    if args.testdata:
+        return args.testdata
+    candidate = os.path.join(os.path.dirname(__file__), '..', '..', 'testdata')
+    if os.path.isdir(candidate):
+        return candidate
+    print("ERROR: testdata directory not found.")
+    print("Usage: python tests/test_quick.py --testdata /path/to/visqol/testdata")
+    sys.exit(1)
+
+
+TD = _get_testdata_dir()
 CONF = os.path.join(TD, 'conformance_testdata_subset')
 SPEECH = os.path.join(TD, 'clean_speech')
 
