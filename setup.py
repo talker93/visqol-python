@@ -29,7 +29,7 @@ setup(
         ],
     },
     package_data={
-        "": ["model/*.txt"],
+        "visqol": ["model/*.txt"],
     },
     include_package_data=True,
     keywords=[
@@ -40,7 +40,6 @@ setup(
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",

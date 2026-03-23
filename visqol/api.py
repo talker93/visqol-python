@@ -15,8 +15,8 @@ from visqol.visqol_manager import VisqolManager
 from visqol.visqol_core import SimilarityResult
 
 
-# Default SVR model path (relative to this file)
-_DEFAULT_MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "model")
+# Default SVR model path (bundled inside the package)
+_DEFAULT_MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
 _DEFAULT_SVR_MODEL = os.path.join(_DEFAULT_MODEL_DIR, "libsvm_nu_svr_model.txt")
 
 
