@@ -209,7 +209,7 @@ visqol-python/
 │   ├── test_parallel_correctness.py  # Numba parallel correctness tests
 │   └── bench_*.py             # Performance benchmarks
 ├── .github/workflows/
-│   ├── ci.yml                 # CI: lint + type-check + test on Python 3.12
+│   ├── ci.yml                 # CI: lint + type-check + matrix test (Python × NumPy)
 │   └── publish.yml            # Auto-publish to PyPI on tag push
 ├── pyproject.toml             # Package metadata & build config
 ├── CHANGELOG.md
