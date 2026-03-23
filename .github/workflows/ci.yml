@@ -47,12 +47,17 @@ jobs:
         run: mypy visqol/ --ignore-missing-imports
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Test (py${{ matrix.python-version }} / np${{ matrix.numpy-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.12", "3.13"]
+        numpy-version: ["1.x", "2.x"]
+        exclude:
+          # NumPy 2.x requires Python >= 3.10
+          - python-version: "3.9"
+            numpy-version: "2.x"
 
     steps:
       - uses: actions/checkout@v4
@@ -66,6 +71,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[test]"
+
+      - name: Pin NumPy version
+        run: |
+          if [ "${{ matrix.numpy-version }}" = "1.x" ]; then
+            pip install "numpy>=1.20,<2"
+          else
+            pip install "numpy>=2.0"
+          fi
+
+      - name: Show dependency versions
+        run: python -c "import numpy; import scipy; print(f'numpy={numpy.__version__}  scipy={scipy.__version__}')"
 
       - name: Run tests
         run: pytest tests/test_quick.py -v
