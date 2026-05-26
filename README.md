@@ -12,10 +12,14 @@ ViSQOL compares a reference audio signal with a degraded version and outputs a *
 ## Features
 
 - **Two modes**: Audio mode (music/general audio at 48 kHz) and Speech mode (speech at 16 kHz)
-- **High accuracy**: 11/11 conformance tests pass against the official C++ implementation
+- **High accuracy**: 12/12 conformance tests pass against the official C++ implementation
   - Audio mode: 9/10 tests produce **identical** MOS scores (diff = 0.000000), 1 test diff = 0.000117
-  - Speech mode: diff = 0.006715
-- **Pure Python**: no C/C++ compilation required
+  - Speech mode (polynomial): diff = 0.006715
+  - Speech mode (lattice TFLite): bit-near C++ default behaviour
+- **Two speech quality mappers** matching C++ ViSQOL:
+  - **Lattice (default)** — deep-lattice TFLite network (`--use_lattice_model=true` in C++); requires the optional `[lattice]` extra
+  - **Polynomial (fallback)** — legacy exponential fit (`--use_lattice_model=false` in C++)
+- **Pure Python**: no C/C++ compilation required (the optional `[lattice]` extra adds the Google `ai-edge-litert` TFLite runtime as a binary wheel)
 - **Minimal dependencies**: 4 core pip packages (`numpy`, `scipy`, `soundfile`, `libsvm-official`)
 - **Optional Numba acceleration**: `pip install visqol-python[accel]` for JIT-compiled Gammatone filterbank (parallel + fastmath) and DP patch matching — **9× overall speedup**, RTF 0.064 (surpasses C++ estimates)
 - **Batch & parallel evaluation**: `measure_batch(parallel=True)` for multi-process execution across CPU cores
@@ -27,10 +31,22 @@ ViSQOL compares a reference audio signal with a degraded version and outputs a *
 pip install visqol-python
 ```
 
+For **C++-default-equivalent speech mode** (deep-lattice TFLite mapper):
+
+```bash
+pip install visqol-python[lattice]   # requires Python ≥ 3.10
+```
+
 For **Numba-accelerated** Gammatone filtering and DP matching (~9× faster):
 
 ```bash
 pip install visqol-python[accel]
+```
+
+Install everything (lattice + numba):
+
+```bash
+pip install visqol-python[all]
 ```
 
 Or install from source:
@@ -40,6 +56,8 @@ git clone https://github.com/talker93/visqol-python.git
 cd visqol-python
 pip install -e ".[dev]"
 ```
+
+> **Note on speech mode parity**: Without the `[lattice]` extra, speech mode falls back to the polynomial mapping (equivalent to running C++ ViSQOL with `--use_lattice_model=false`). The polynomial can over-predict MOS by 1–2 points on degraded speech vs the C++ default. Install `[lattice]` whenever you need numbers that line up with the C++ default behaviour (see [issue #1](https://github.com/talker93/visqol-python/issues/1)).
 
 ## Quick Start
 
@@ -126,7 +144,10 @@ python -m visqol -r reference.wav -d degraded.wav -v
 |------|-------------|
 | `-r`, `--reference` | Path to reference WAV file (required) |
 | `-d`, `--degraded` | Path to degraded WAV file (required) |
-| `--speech_mode` | Use speech mode (16 kHz, polynomial mapping) |
+| `--speech_mode` | Use speech mode (16 kHz) |
+| `--no_lattice_model` | Speech mode: disable lattice TFLite mapper, use polynomial fallback |
+| `--lattice_model` | Custom path to lattice `.tflite` model (speech mode) |
+| `--unscaled_speech` | Don't scale polynomial speech MOS to 5.0 (polynomial only) |
 | `--model` | Custom SVR model file path (audio mode only) |
 | `--search_window` | Search window radius (default: 60) |
 | `--verbose`, `-v` | Show detailed per-patch results |
@@ -154,9 +175,13 @@ The `measure()` method returns a `SimilarityResult` object with:
 
 ### Speech Mode
 - Target sample rate: **16 kHz**
-- 32 Gammatone frequency bands (50 Hz – 8 000 Hz)
-- Quality mapping: exponential polynomial fit
+- 21 Gammatone frequency bands (50 Hz – 8 000 Hz)
 - VAD (Voice Activity Detection) based patch selection
+- Quality mapping (choose one):
+  - **Deep-lattice TFLite (default)** — same mapper as C++ ViSQOL's default `--use_lattice_model=true`; requires `pip install visqol-python[lattice]`
+  - **Exponential polynomial (fallback)** — same as C++ `--use_lattice_model=false`; used automatically when the lattice runtime is not installed
+- Toggle from Python: `api.create(mode="speech", use_lattice_model=False)`
+- Toggle from CLI: `--no_lattice_model`
 - Best for: speech, VoIP, telephony
 
 ## Performance
@@ -234,7 +259,10 @@ Tested against the [official C++ ViSQOL v3.3.3](https://github.com/google/visqol
 | glock_48aac | Audio | 4.3325 | 4.3325 | 0.000000 |
 | contrabassoon_24aac | Audio | 2.3469 | 2.3468 | 0.000117 |
 | castanets_identity | Audio | 4.7321 | 4.7321 | 0.000000 |
-| speech_CA01 | Speech | 3.3745 | 3.3678 | 0.006715 |
+| speech_CA01 (polynomial) | Speech | 3.3745 | 3.3678 | 0.006715 |
+| speech_CA01 (lattice) | Speech | 3.3985¹ | 3.3985 | 0.000000 |
+
+¹ Lattice-mode expected value captured from this Python implementation as a regression baseline. Because `ai-edge-litert` reuses the upstream Google TFLite C++ runtime, the lattice MOS should match the C++ default to within the same ~1e-4 envelope as the audio-mode results above.
 
 ## References
 

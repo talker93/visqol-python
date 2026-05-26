@@ -7,6 +7,7 @@ Corresponds to C++ file: visqol_manager.cc
 from __future__ import annotations
 
 import logging
+import os
 
 from visqol.alignment import globally_align
 from visqol.analysis_window import AnalysisWindow
@@ -17,6 +18,8 @@ from visqol.quality_mapper import (
     SimilarityToQualityMapper,
     SpeechSimilarityToQualityMapper,
     SvrSimilarityToQualityMapper,
+    TFLiteSpeechQualityMapper,
+    has_lattice_runtime,
 )
 from visqol.visqol_core import SimilarityResult, VisqolCore
 
@@ -34,12 +37,20 @@ DURATION_MISMATCH_TOLERANCE: float = 1.0  # seconds
 K_16K_SAMPLE_RATE: int = 16000
 K_48K_SAMPLE_RATE: int = 48000
 
+# Default bundled lattice TFLite model for speech mode (C++ default behaviour).
+_DEFAULT_LATTICE_MODEL: str = os.path.join(
+    os.path.dirname(__file__),
+    "model",
+    "lattice_tcditugenmeetpackhref_ls2_nl60_lr12_bs2048_learn.005_ep2400_train1_7_raw.tflite",
+)
+
 
 class VisqolManager:
     """Main manager class that configures and runs ViSQOL."""
 
     def __init__(self) -> None:
         self.use_speech_mode: bool = False
+        self.use_lattice_model: bool = True
         self.search_window: int = 60
         self.disable_global_alignment: bool = False
         self.disable_realignment: bool = False
@@ -55,6 +66,8 @@ class VisqolManager:
         model_path: str = "",
         use_speech_mode: bool = False,
         use_unscaled_speech: bool = False,
+        use_lattice_model: bool | None = None,
+        lattice_model_path: str = "",
         search_window: int = 60,
         disable_global_alignment: bool = False,
         disable_realignment: bool = False,
@@ -65,7 +78,14 @@ class VisqolManager:
         Args:
             model_path: Path to SVR model file (Audio mode).
             use_speech_mode: Use speech mode (16 kHz, 21 bands).
-            use_unscaled_speech: Don't scale speech MOS to max 5.0.
+            use_unscaled_speech: Don't scale speech MOS to max 5.0 (polynomial only).
+            use_lattice_model: Speech mode only. If *True*, use the deep-lattice
+                TFLite mapper (matches C++ default). If *False*, use the
+                polynomial fallback. If *None* (default), auto-enable when
+                ``ai-edge-litert`` is installed, otherwise fall back to
+                polynomial with a one-time warning.
+            lattice_model_path: Custom path to the lattice ``.tflite`` model.
+                Empty string means use the bundled default.
             search_window: Search window radius in patch units.
             disable_global_alignment: Skip global alignment.
             disable_realignment: Skip fine realignment.
@@ -97,14 +117,39 @@ class VisqolManager:
 
         # Initialize quality mapper
         if use_speech_mode:
-            self.quality_mapper = SpeechSimilarityToQualityMapper(
-                scale_to_max_mos=not use_unscaled_speech,
-            )
+            self.use_lattice_model = self._resolve_use_lattice(use_lattice_model)
+            if self.use_lattice_model:
+                tflite_path = lattice_model_path or _DEFAULT_LATTICE_MODEL
+                self.quality_mapper = TFLiteSpeechQualityMapper(tflite_path)
+            else:
+                self.quality_mapper = SpeechSimilarityToQualityMapper(
+                    scale_to_max_mos=not use_unscaled_speech,
+                )
         else:
+            self.use_lattice_model = False
             self.quality_mapper = SvrSimilarityToQualityMapper(model_path)
 
         self.quality_mapper.init()
         self.is_initialized = True
+
+    @staticmethod
+    def _resolve_use_lattice(requested: bool | None) -> bool:
+        """Decide whether to use the lattice mapper based on user request + runtime availability."""
+        if requested is True:
+            # User explicitly asked for lattice; surface clear ImportError if missing.
+            return True
+        if requested is False:
+            return False
+        # Auto-detect: prefer lattice if the runtime is installed.
+        if has_lattice_runtime():
+            return True
+        logger.warning(
+            "Speech mode lattice runtime (ai-edge-litert) not installed; "
+            "falling back to polynomial mapping, which may over-predict MOS "
+            "by 1-2 points vs the C++ default. "
+            "Install with: pip install visqol-python[lattice]"
+        )
+        return False
 
     def run(self, ref_path: str, deg_path: str) -> SimilarityResult:
         """

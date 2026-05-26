@@ -57,6 +57,8 @@ class VisqolApi:
         model_path: str | None = None,
         search_window: int = 60,
         use_unscaled_speech: bool = False,
+        use_lattice_model: bool | None = None,
+        lattice_model_path: str | None = None,
         disable_global_alignment: bool = False,
         disable_realignment: bool = False,
     ) -> None:
@@ -65,18 +67,29 @@ class VisqolApi:
 
         Args:
             mode: ``"audio"`` for music/general audio (48 kHz, SVR model) or
-                ``"speech"`` for speech signals (16 kHz, exponential fit).
+                ``"speech"`` for speech signals (16 kHz).
             model_path: Path to SVR model file (Audio mode only).
                 If *None*, uses the bundled default model.
             search_window: Search window radius (default 60).
-            use_unscaled_speech: If *True*, don't scale speech MOS to 5.0.
+            use_unscaled_speech: If *True*, don't scale polynomial speech MOS
+                to 5.0. Ignored when the lattice mapper is active.
+            use_lattice_model: Speech mode only. If *True*, use the deep-lattice
+                TFLite mapper (matches C++ default behaviour, requires
+                ``pip install visqol-python[lattice]``). If *False*, use the
+                polynomial fallback. If *None* (default), auto-enable when the
+                runtime is available and warn-and-fallback otherwise.
+            lattice_model_path: Custom path to the lattice ``.tflite`` model.
+                If *None*, uses the bundled default model.
             disable_global_alignment: Skip global alignment step.
             disable_realignment: Skip fine realignment step.
 
         Raises:
             ValueError: If *mode* is not ``"audio"`` or ``"speech"``.
             ValueError: If *search_window* is not positive.
-            FileNotFoundError: If *model_path* is given but does not exist.
+            FileNotFoundError: If *model_path* or *lattice_model_path* is
+                given but does not exist.
+            ImportError: If ``use_lattice_model=True`` was requested but
+                ``ai-edge-litert`` is not installed.
         """
         mode_lower = mode.lower()
         if mode_lower not in _VALID_MODES:
@@ -93,11 +106,16 @@ class VisqolApi:
         if model_path is not None and not os.path.isfile(model_path):
             raise FileNotFoundError(f"SVR model file not found: {model_path}")
 
+        if lattice_model_path is not None and not os.path.isfile(lattice_model_path):
+            raise FileNotFoundError(f"Lattice model file not found: {lattice_model_path}")
+
         # Store kwargs for batch mode (subprocess recreation)
         self._create_kwargs = {
             "model_path": model_path or "",
             "use_speech_mode": use_speech_mode,
             "use_unscaled_speech": use_unscaled_speech,
+            "use_lattice_model": use_lattice_model,
+            "lattice_model_path": lattice_model_path or "",
             "search_window": search_window,
             "disable_global_alignment": disable_global_alignment,
             "disable_realignment": disable_realignment,

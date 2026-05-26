@@ -13,7 +13,7 @@ Usage:
     print(f"MOS-LQO: {result.moslqo}")
 """
 
-__version__: str = "3.4.0"
+__version__: str = "3.5.0"
 
 from visqol.api import ProgressCallback, VisqolApi
 from visqol.audio_utils import AudioSignal

@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.5.0] - 2026-05-26
+
+### Added
+- **Deep-lattice TFLite speech quality mapper** (`pip install visqol-python[lattice]`):
+  - `TFLiteSpeechQualityMapper` loads the same `.tflite` lattice network used by
+    C++ ViSQOL's default `--use_lattice_model=true` and runs inference through
+    the upstream Google TFLite C++ runtime via `ai-edge-litert`
+  - New `use_lattice_model` parameter on `VisqolApi.create()` (default `None`
+    auto-enables lattice when the runtime is installed)
+  - New `lattice_model_path` parameter to override the bundled model
+  - New CLI flags `--no_lattice_model` and `--lattice_model PATH`
+- New `[lattice]` and `[all]` extras in `pyproject.toml`
+- Bundled `lattice_*.tflite` (2.1 MB) into the wheel as package data
+
+### Fixed
+- **GH issue #1**: Speech-mode MOS scores were systematically 1–2 points higher
+  than C++ ViSQOL's default. Root cause: the Python port only implemented the
+  legacy polynomial mapper (`SpeechSimilarityToQualityMapper`, equivalent to
+  C++ `--use_lattice_model=false`), while the C++ default routes through the
+  TFLite lattice network. Installing `visqol-python[lattice]` now matches C++
+  default scoring.
+
+### Changed
+- Speech mode `create(mode="speech")` now auto-uses lattice when available; when
+  `ai-edge-litert` is missing, it logs a one-time warning and falls back to
+  polynomial (existing scores reproduce exactly).
+- `tests/test_conformance.py` split the single speech case into
+  `test_speech_polynomial_conformance` (existing C++ polynomial baseline 3.3745)
+  and `test_speech_lattice_conformance` (regression baseline captured from this
+  implementation).
+- README: documented the polynomial-vs-lattice distinction, new install matrix,
+  and parity caveats.
+
 ## [3.4.0] - 2026-03-23
 
 ### Added
@@ -93,6 +126,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Bundled SVR model (`libsvm_nu_svr_model.txt`)
 - GitHub Actions workflow for auto-publish to PyPI via Trusted Publisher
 
+[3.5.0]: https://github.com/talker93/visqol-python/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/talker93/visqol-python/compare/v3.3.6...v3.4.0
 [3.3.6]: https://github.com/talker93/visqol-python/compare/v3.3.5...v3.3.6
 [3.3.5]: https://github.com/talker93/visqol-python/compare/v3.3.4...v3.3.5

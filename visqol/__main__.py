@@ -53,7 +53,21 @@ def main() -> None:
     parser.add_argument(
         "--unscaled_speech",
         action="store_true",
-        help="Don't scale speech MOS to max 5.0",
+        help="Don't scale speech MOS to max 5.0 (polynomial mapping only)",
+    )
+    parser.add_argument(
+        "--no_lattice_model",
+        action="store_true",
+        help=(
+            "Speech mode: disable the deep-lattice TFLite mapper and use the "
+            "polynomial mapping instead. By default lattice is auto-enabled "
+            "when `ai-edge-litert` is installed (matches C++ default)."
+        ),
+    )
+    parser.add_argument(
+        "--lattice_model",
+        default=None,
+        help="Path to lattice .tflite model (speech mode, optional override).",
     )
     parser.add_argument(
         "--no_alignment",
@@ -86,19 +100,24 @@ def main() -> None:
     mode: str = "speech" if args.speech_mode else "audio"
 
     try:
+        # Lattice toggle: pass False if --no_lattice_model, else None (auto-detect).
+        use_lattice = False if args.no_lattice_model else None
+
         api = VisqolApi()
         api.create(
             mode=mode,
             model_path=args.model,
             search_window=args.search_window,
             use_unscaled_speech=args.unscaled_speech,
+            use_lattice_model=use_lattice,
+            lattice_model_path=args.lattice_model,
             disable_global_alignment=args.no_alignment,
             disable_realignment=args.no_realignment,
         )
 
         result = api.measure(args.reference, args.degraded)
 
-    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+    except (FileNotFoundError, ValueError, RuntimeError, ImportError) as exc:
         logger.error("%s", exc)
         sys.exit(1)
     except Exception as exc:

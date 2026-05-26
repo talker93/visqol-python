@@ -52,9 +52,22 @@ def audio_api():
 
 
 @pytest.fixture(scope="session")
-def speech_api():
+def speech_polynomial_api():
+    """Speech mode with the legacy polynomial mapper (C++ --use_lattice_model=false)."""
     api = VisqolApi()
-    api.create(mode="speech")
+    api.create(mode="speech", use_lattice_model=False)
+    return api
+
+
+@pytest.fixture(scope="session")
+def speech_lattice_api():
+    """Speech mode with the deep-lattice TFLite mapper (C++ default)."""
+    pytest.importorskip(
+        "ai_edge_litert",
+        reason="ai-edge-litert not installed (pip install visqol-python[lattice]).",
+    )
+    api = VisqolApi()
+    api.create(mode="speech", use_lattice_model=True)
     return api
 
 
@@ -105,8 +118,21 @@ AUDIO_CASES = [
     ),
 ]
 
-SPEECH_CASES = [
+# Speech conformance with the polynomial mapper (== C++ --use_lattice_model=false).
+# Expected values come from running C++ ViSQOL v3.3.3 with that flag.
+SPEECH_POLYNOMIAL_CASES = [
     ("CA01_01.wav", "transcoded_CA01_01.wav", 3.374505555111911, "CA01_transcoded"),
+]
+
+# Speech conformance with the deep-lattice TFLite mapper (C++ default).
+# Expected values are captured from this Python implementation as a regression
+# baseline. Because `ai-edge-litert` shares the upstream TFLite C++ runtime
+# with the C++ ViSQOL build, the two implementations should diverge only in
+# the upstream feature-extraction stages (Gammatone, NSIM) — which already
+# differ by at most ~1e-4 in audio mode. Re-baseline by rerunning the C++
+# binary with default flags and updating the expected values below.
+SPEECH_LATTICE_CASES = [
+    ("CA01_01.wav", "transcoded_CA01_01.wav", 3.39851713180542, "CA01_transcoded_lattice"),
 ]
 
 
@@ -133,13 +159,32 @@ def test_audio_conformance(audio_api, conf_dir, ref_name, deg_name, expected_mos
 
 @pytest.mark.parametrize(
     "ref_name, deg_name, expected_mos, test_id",
-    SPEECH_CASES,
-    ids=[c[3] for c in SPEECH_CASES],
+    SPEECH_POLYNOMIAL_CASES,
+    ids=[c[3] for c in SPEECH_POLYNOMIAL_CASES],
 )
-def test_speech_conformance(speech_api, speech_dir, ref_name, deg_name, expected_mos, test_id):
+def test_speech_polynomial_conformance(
+    speech_polynomial_api, speech_dir, ref_name, deg_name, expected_mos, test_id
+):
     ref_path = os.path.join(speech_dir, ref_name)
     deg_path = os.path.join(speech_dir, deg_name)
-    result = speech_api.measure(ref_path, deg_path)
+    result = speech_polynomial_api.measure(ref_path, deg_path)
+    diff = abs(result.moslqo - expected_mos)
+    assert diff < TOLERANCE, (
+        f"[{test_id}] MOS={result.moslqo:.6f}, expected={expected_mos:.6f}, diff={diff:.6f}"
+    )
+
+
+@pytest.mark.parametrize(
+    "ref_name, deg_name, expected_mos, test_id",
+    SPEECH_LATTICE_CASES,
+    ids=[c[3] for c in SPEECH_LATTICE_CASES],
+)
+def test_speech_lattice_conformance(
+    speech_lattice_api, speech_dir, ref_name, deg_name, expected_mos, test_id
+):
+    ref_path = os.path.join(speech_dir, ref_name)
+    deg_path = os.path.join(speech_dir, deg_name)
+    result = speech_lattice_api.measure(ref_path, deg_path)
     diff = abs(result.moslqo - expected_mos)
     assert diff < TOLERANCE, (
         f"[{test_id}] MOS={result.moslqo:.6f}, expected={expected_mos:.6f}, diff={diff:.6f}"
