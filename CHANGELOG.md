@@ -33,6 +33,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   would have discarded. Fixing this brought polynomial speech parity from
   diff 0.007 → 0.001 and was a prerequisite for lattice parity. Only the
   speech-mode VAD path used this function; audio mode is unaffected.
+- **`nsim` stddev estimator mismatch**: both ``nsim.measure_patch_similarity``
+  (``np.std(..., ddof=0)``) and the Numba ``_measure_patch_similarity_numba``
+  kernel (``sqrt(ss / cols)``) used the population estimator (divide by N).
+  C++ uses Armadillo's ``stddev(..., 0)`` which is the *unbiased* sample
+  estimator (divide by N-1, despite the misleading ``0`` flag). The
+  per-band ``freq_band_stddevs`` was therefore systematically smaller by
+  ``sqrt((N-1)/N) ≈ 0.974``, which fed into the pooled ``fstdnsim`` and
+  perturbed every lattice prediction.
+- **`numba_accel.fastmath=True` on the Gammatone spectrogram kernel**: the
+  compounded LLVM-level FP reassociation across the 4-stage cascaded IIR ×
+  thousands of samples × hundreds of frames pushed lattice MOS off by
+  another ~0.02 vs strict IEEE-754. ``fastmath`` has been removed from the
+  spectrogram kernel; ``parallel=True`` is kept (each frame's IIR state is
+  independent so the reduction is safe).
+
+### Speech-mode parity numbers (CA01 conformance)
+
+| Mode | Before all fixes | After all fixes | C++ baseline |
+|------|------------------|-----------------|--------------|
+| Polynomial | diff 0.0067 | **diff 0.0011** | 3.3745 |
+| Lattice | diff 0.0856 (≈1–2 MOS on Nils's TCD-VOIP samples) | **diff 0.0023** | 3.3130 |
 
 ### Changed
 - Speech mode `create(mode="speech")` now auto-uses lattice when available; when

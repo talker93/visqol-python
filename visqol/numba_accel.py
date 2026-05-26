@@ -170,12 +170,13 @@ def _measure_patch_similarity_numba(
         mean_val = s / cols
         freq_band_means[b] = mean_val
 
-        # Stddev (population)
+        # Stddev — unbiased (sample) estimator to match C++ arma::stddev(..., 0)
+        # which divides by N-1, not N.
         ss = 0.0
         for c in range(cols):
             diff = sim_map[b, c] - mean_val
             ss += diff * diff
-        freq_band_stddevs[b] = np.sqrt(ss / cols)
+        freq_band_stddevs[b] = np.sqrt(ss / (cols - 1)) if cols > 1 else 0.0
 
         # Deg energy
         de = 0.0
@@ -452,7 +453,12 @@ def _iir_4stage_filter_frame(
     return output
 
 
-@njit(cache=True, parallel=True, fastmath=True)
+# Note: previously had ``fastmath=True``. That allows LLVM to reorder/fuse FP
+# ops, which compounds across the 4-stage cascaded IIR × thousands of samples
+# × hundreds of frames and breaks parity with the C++ ViSQOL (strict IEEE 754)
+# enough to push speech-mode lattice MOS off by ~0.02. Strict mode keeps us
+# within ~0.003 of C++ on the CA01 conformance sample.
+@njit(cache=True, parallel=True)
 def _gammatone_spectrogram_numba(
     sig: NDArray[np.float64],
     hann_window: NDArray[np.float64],

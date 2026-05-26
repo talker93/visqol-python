@@ -129,8 +129,11 @@ def measure_patch_similarity(
     sim_map = intensity * structure
 
     # Per-frequency-band statistics
+    # Note: C++ uses Armadillo's `arma::stddev(..., 0)` which is the *unbiased*
+    # estimator (divides by N-1). NumPy's default `ddof=0` divides by N and was
+    # the original Python behaviour; switching to `ddof=1` aligns with C++.
     freq_band_means: NDArray[np.float64] = np.mean(sim_map, axis=1)
-    freq_band_stddevs: NDArray[np.float64] = np.std(sim_map, axis=1, ddof=0)
+    freq_band_stddevs: NDArray[np.float64] = np.std(sim_map, axis=1, ddof=1)
     freq_band_deg_energy: NDArray[np.float64] = np.mean(deg_patch, axis=1)
 
     # Overall similarity (mean of frequency band means)

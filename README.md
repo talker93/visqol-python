@@ -15,7 +15,7 @@ ViSQOL compares a reference audio signal with a degraded version and outputs a *
 - **High accuracy**: 12/12 conformance tests pass against the official C++ implementation
   - Audio mode: 9/10 tests produce **identical** MOS scores (diff = 0.000000), 1 test diff = 0.000117
   - Speech mode (polynomial): diff = 0.001057
-  - Speech mode (lattice TFLite): diff = 0.026848
+  - Speech mode (lattice TFLite): diff = 0.002341
 - **Two speech quality mappers** matching C++ ViSQOL:
   - **Lattice (default)** — deep-lattice TFLite network (`--use_lattice_model=true` in C++); requires the optional `[lattice]` extra
   - **Polynomial (fallback)** — legacy exponential fit (`--use_lattice_model=false` in C++)
@@ -260,9 +260,9 @@ Tested against the [official C++ ViSQOL v3.3.3](https://github.com/google/visqol
 | contrabassoon_24aac | Audio | 2.3469 | 2.3468 | 0.000117 |
 | castanets_identity | Audio | 4.7321 | 4.7321 | 0.000000 |
 | speech_CA01 (polynomial) | Speech | 3.3745 | 3.3756 | 0.001057 |
-| speech_CA01 (lattice) | Speech | 3.3130 | 3.3398 | 0.026848 |
+| speech_CA01 (lattice) | Speech | 3.3130 | 3.3153 | 0.002341 |
 
-Both speech values come from running the C++ ViSQOL binary directly with the corresponding `--use_lattice_model` flag, so they represent ground-truth parity targets. Lattice retains a larger residual than polynomial because the deep network amplifies the small per-band numerical differences that remain in the Python upstream pipeline.
+Both speech values come from running the C++ ViSQOL binary directly with the corresponding `--use_lattice_model` flag, so they represent ground-truth parity targets.
 
 ## References
 
