@@ -14,8 +14,8 @@ ViSQOL compares a reference audio signal with a degraded version and outputs a *
 - **Two modes**: Audio mode (music/general audio at 48 kHz) and Speech mode (speech at 16 kHz)
 - **High accuracy**: 12/12 conformance tests pass against the official C++ implementation
   - Audio mode: 9/10 tests produce **identical** MOS scores (diff = 0.000000), 1 test diff = 0.000117
-  - Speech mode (polynomial): diff = 0.006715
-  - Speech mode (lattice TFLite): bit-near C++ default behaviour
+  - Speech mode (polynomial): diff = 0.001057
+  - Speech mode (lattice TFLite): diff = 0.026848
 - **Two speech quality mappers** matching C++ ViSQOL:
   - **Lattice (default)** — deep-lattice TFLite network (`--use_lattice_model=true` in C++); requires the optional `[lattice]` extra
   - **Polynomial (fallback)** — legacy exponential fit (`--use_lattice_model=false` in C++)
@@ -259,10 +259,10 @@ Tested against the [official C++ ViSQOL v3.3.3](https://github.com/google/visqol
 | glock_48aac | Audio | 4.3325 | 4.3325 | 0.000000 |
 | contrabassoon_24aac | Audio | 2.3469 | 2.3468 | 0.000117 |
 | castanets_identity | Audio | 4.7321 | 4.7321 | 0.000000 |
-| speech_CA01 (polynomial) | Speech | 3.3745 | 3.3678 | 0.006715 |
-| speech_CA01 (lattice) | Speech | 3.3985¹ | 3.3985 | 0.000000 |
+| speech_CA01 (polynomial) | Speech | 3.3745 | 3.3756 | 0.001057 |
+| speech_CA01 (lattice) | Speech | 3.3130 | 3.3398 | 0.026848 |
 
-¹ Lattice-mode expected value captured from this Python implementation as a regression baseline. Because `ai-edge-litert` reuses the upstream Google TFLite C++ runtime, the lattice MOS should match the C++ default to within the same ~1e-4 envelope as the audio-mode results above.
+Both speech values come from running the C++ ViSQOL binary directly with the corresponding `--use_lattice_model` flag, so they represent ground-truth parity targets. Lattice retains a larger residual than polynomial because the deep network amplifies the small per-band numerical differences that remain in the Python upstream pipeline.
 
 ## References
 

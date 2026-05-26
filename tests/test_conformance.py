@@ -125,14 +125,12 @@ SPEECH_POLYNOMIAL_CASES = [
 ]
 
 # Speech conformance with the deep-lattice TFLite mapper (C++ default).
-# Expected values are captured from this Python implementation as a regression
-# baseline. Because `ai-edge-litert` shares the upstream TFLite C++ runtime
-# with the C++ ViSQOL build, the two implementations should diverge only in
-# the upstream feature-extraction stages (Gammatone, NSIM) — which already
-# differ by at most ~1e-4 in audio mode. Re-baseline by rerunning the C++
-# binary with default flags and updating the expected values below.
+# Expected values come from running the C++ ViSQOL binary with default flags
+# (--use_lattice_model=true). Residual divergence from this Python port is
+# tracked by the TOLERANCE constant above; lattice tends to amplify upstream
+# numerical noise more than the polynomial mapper.
 SPEECH_LATTICE_CASES = [
-    ("CA01_01.wav", "transcoded_CA01_01.wav", 3.39851713180542, "CA01_transcoded_lattice"),
+    ("CA01_01.wav", "transcoded_CA01_01.wav", 3.3129589557647705, "CA01_transcoded_lattice"),
 ]
 
 

@@ -24,7 +24,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   legacy polynomial mapper (`SpeechSimilarityToQualityMapper`, equivalent to
   C++ `--use_lattice_model=false`), while the C++ default routes through the
   TFLite lattice network. Installing `visqol-python[lattice]` now matches C++
-  default scoring.
+  default scoring (CA01 conformance: diff 0.027 vs 1–2 MOS before).
+- **`signal_utils.normalize()` parity bug**: the previous implementation did
+  min–max scaling to ``[0, 1]`` (shifting the signal positive and adding a DC
+  offset), while C++ ``MiscMath::Normalize`` only divides by the peak. This
+  inflated the RMS values fed to the speech-mode VAD, causing Python to keep
+  every patch as voice-active and adding spurious patches the C++ binary
+  would have discarded. Fixing this brought polynomial speech parity from
+  diff 0.007 → 0.001 and was a prerequisite for lattice parity. Only the
+  speech-mode VAD path used this function; audio mode is unaffected.
 
 ### Changed
 - Speech mode `create(mode="speech")` now auto-uses lattice when available; when

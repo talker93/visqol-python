@@ -71,15 +71,18 @@ def find_best_lag(ref: NDArray[np.float64], deg: NDArray[np.float64]) -> int:
 
 def normalize(mat: NDArray[np.float64]) -> NDArray[np.float64]:
     """
-    Normalize a matrix / vector to ``[0, 1]`` range.
+    Peak-normalize a matrix / vector so the maximum element becomes 1.0.
 
-    Matches C++ ``MiscMath::Normalize``.
+    Matches C++ ``MiscMath::Normalize``, which divides every element by
+    ``max(mat)`` (it does **not** subtract the minimum). For typical
+    bipolar audio in ``[-peak, +peak]`` this yields output in ``[-1, +1]``,
+    preserving the signal's DC sign. Previous min-max scaling shifted the
+    signal positive and broke speech-mode VAD (GH issue #1 follow-up).
     """
-    min_val = np.min(mat)
     max_val = np.max(mat)
-    if max_val == min_val:
+    if max_val == 0:
         return np.zeros_like(mat)
-    return (mat - min_val) / (max_val - min_val)
+    return np.asarray(mat / max_val, dtype=np.float64)
 
 
 def exponential_from_fit(x: float, a: float, b: float, x0: float) -> float:
