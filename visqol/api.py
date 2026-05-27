@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
