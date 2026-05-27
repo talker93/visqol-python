@@ -6,10 +6,71 @@ Corresponds to C++ files: envelope.cc, xcorr.cc, misc_math.cc
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from typing import Iterator
+
 import numpy as np
+import scipy.fft
 from numpy.typing import NDArray
-from scipy import signal as scipy_signal
 from scipy.fft import fft, ifft
+
+# Optional pyFFTW backend. pyFFTW wraps FFTW3, which is 2-3× faster than
+# scipy's pocketfft on the sizes used by ViSQOL alignment (~256k–1M points).
+# When installed, ``_fft_backend()`` routes every ``scipy.fft.fft`` /
+# ``scipy.fft.ifft`` call inside this module through pyFFTW. Results match
+# scipy at the ULP level (FFTW uses split-radix and rounds slightly
+# differently than pocketfft).
+try:
+    import pyfftw
+    import pyfftw.interfaces.scipy_fft as _pyfftw_scipy_fft
+
+    pyfftw.interfaces.cache.enable()
+    # Keep plans for 60 s so consecutive alignments of the same audio length
+    # (e.g. fine realignment, batch evaluation) reuse the cached FFTW plan.
+    pyfftw.interfaces.cache.set_keepalive_time(60.0)
+    _HAS_PYFFTW = True
+except ImportError:
+    _pyfftw_scipy_fft = None  # type: ignore[assignment]
+    _HAS_PYFFTW = False
+
+
+@contextmanager
+def _fft_backend() -> Iterator[None]:
+    """Route scipy.fft calls through pyFFTW for the duration of the block."""
+    if _HAS_PYFFTW:
+        with scipy.fft.set_backend(_pyfftw_scipy_fft):
+            yield
+    else:
+        yield
+
+
+def _hilbert(x: NDArray[np.float64]) -> NDArray[np.complex128]:
+    """
+    Hilbert transform — drop-in replacement for ``scipy.signal.hilbert``
+    that skips the intermediate ``h`` mask and elementwise multiplication.
+
+    ``scipy.signal.hilbert`` allocates an ``h`` array of length N, marks the
+    DC + Nyquist bins as 1, doubles the positive frequencies, and then
+    multiplies the FFT by ``h``. Since ``h`` is mostly 0s and 2s, the same
+    operation can be done in place on the spectrum: scale the positive-
+    frequency half by 2 and zero the negative half. Saves the ``h``
+    allocation and one full-length complex multiplication.
+
+    Numerically equivalent to ``scipy.signal.hilbert`` to within ULP
+    rounding (the FP multiplication order differs slightly).
+    """
+    n = len(x)
+    spectrum = np.asarray(fft(x), dtype=np.complex128)
+    if n % 2 == 0:
+        # DC at bin 0, Nyquist at bin n//2 stay as-is; positive freqs ×2;
+        # negative freqs zeroed.
+        spectrum[1 : n // 2] *= 2.0
+        spectrum[n // 2 + 1 :] = 0.0
+    else:
+        # No Nyquist bin for odd N; positive freqs ×2 up to (n-1)/2.
+        spectrum[1 : (n + 1) // 2] *= 2.0
+        spectrum[(n + 1) // 2 :] = 0.0
+    return np.asarray(ifft(spectrum), dtype=np.complex128)
 
 
 def upper_envelope(sig: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -25,7 +86,8 @@ def upper_envelope(sig: NDArray[np.float64]) -> NDArray[np.float64]:
     """
     mean_val: float = float(np.mean(sig))
     centered = sig - mean_val
-    analytic = scipy_signal.hilbert(centered)
+    with _fft_backend():
+        analytic = _hilbert(centered)
     env: NDArray[np.float64] = np.abs(analytic) + mean_val
     return env
 
@@ -55,15 +117,18 @@ def find_best_lag(ref: NDArray[np.float64], deg: NDArray[np.float64]) -> int:
     while fft_points < 2 * n - 1:
         fft_points *= 2
 
-    fft_ref = fft(ref_padded, n=fft_points)
-    fft_deg = fft(deg_padded, n=fft_points)
-    pointwise = fft_ref * np.conj(fft_deg)
-    xcorr_full: NDArray[np.float64] = np.real(ifft(pointwise))
+    with _fft_backend():
+        fft_ref = fft(ref_padded, n=fft_points)
+        fft_deg = fft(deg_padded, n=fft_points)
+        pointwise = fft_ref * np.conj(fft_deg)
+        xcorr_full: NDArray[np.float64] = np.real(ifft(pointwise))
 
-    # Build correlation vector: [negative lags, positive lags]
-    neg_corrs = xcorr_full[-max_lag:].tolist()
-    pos_corrs = xcorr_full[: max_lag + 1].tolist()
-    corrs = neg_corrs + pos_corrs
+    # Build correlation vector: [negative lags, positive lags]. The
+    # previous implementation called ``.tolist()`` on the two slices and
+    # ran builtin argmax over a Python list — for ~1 M samples that was
+    # 30+ ms of pure interpreter overhead per call. ``np.concatenate``
+    # plus ``np.argmax`` does the same thing entirely in C.
+    corrs = np.concatenate((xcorr_full[-max_lag:], xcorr_full[: max_lag + 1]))
 
     best_idx = int(np.argmax(corrs))
     return best_idx - max_lag

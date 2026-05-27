@@ -15,6 +15,14 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
+from visqol.numba_accel import (
+    _C1,
+    _C3,
+    _GW,
+    _measure_patch_similarity_numba,
+    has_numba,
+)
+
 # 3×3 Gaussian window weights (hardcoded from C++)
 GAUSSIAN_WINDOW: NDArray[np.float64] = np.array(
     [
@@ -91,6 +99,11 @@ def measure_patch_similarity(
 
     Matches C++ ``NeurogramSimiliarityIndexMeasure::MeasurePatchSimilarity``.
 
+    When Numba is available, dispatches to the fused JIT kernel
+    (:func:`visqol.numba_accel._measure_patch_similarity_numba`) — same code
+    path the DP patch matcher uses, so fine realignment shares the same
+    speedup. Falls back to the NumPy implementation when Numba is absent.
+
     Args:
         ref_patch: ``(num_bands, num_frames)`` reference spectrogram patch.
         deg_patch: ``(num_bands, num_frames)`` degraded spectrogram patch.
@@ -99,6 +112,21 @@ def measure_patch_similarity(
         :class:`PatchSimilarityResult` with similarity score and per-band
         statistics.
     """
+    if has_numba():
+        sim_mean, fb_means, fb_stddevs, fb_deg_energy = _measure_patch_similarity_numba(
+            np.ascontiguousarray(ref_patch, dtype=np.float64),
+            np.ascontiguousarray(deg_patch, dtype=np.float64),
+            _GW,
+            _C1,
+            _C3,
+        )
+        return PatchSimilarityResult(
+            similarity=float(sim_mean),
+            freq_band_means=fb_means,
+            freq_band_stddevs=fb_stddevs,
+            freq_band_deg_energy=fb_deg_energy,
+        )
+
     w = GAUSSIAN_WINDOW
 
     # Local means

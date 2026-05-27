@@ -79,45 +79,6 @@ _C3: float = (0.03 * 1.0) ** 2 / 2.0  # 0.00045
 
 
 @njit(cache=True)
-def _conv2d_boundary_valid(
-    kernel: NDArray[np.float64],
-    matrix: NDArray[np.float64],
-) -> NDArray[np.float64]:
-    """
-    2-D correlation with edge-replicated padding then 'valid' crop.
-
-    Equivalent to ``nsim._valid_2d_conv_with_boundary`` but pure loops
-    so Numba can JIT-compile it.
-    """
-    rows, cols = matrix.shape
-    kh, kw = kernel.shape
-    pad_h = kh // 2
-    pad_w = kw // 2
-
-    out = np.empty((rows, cols), dtype=np.float64)
-
-    for r in range(rows):
-        for c in range(cols):
-            s = 0.0
-            for kr in range(kh):
-                for kc in range(kw):
-                    ir = r + kr - pad_h
-                    ic = c + kc - pad_w
-                    # Clamp to edge (replicate boundary)
-                    if ir < 0:
-                        ir = 0
-                    elif ir >= rows:
-                        ir = rows - 1
-                    if ic < 0:
-                        ic = 0
-                    elif ic >= cols:
-                        ic = cols - 1
-                    s += kernel[kr, kc] * matrix[ir, ic]
-            out[r, c] = s
-    return out
-
-
-@njit(cache=True)
 def _measure_patch_similarity_numba(
     ref_patch: NDArray[np.float64],
     deg_patch: NDArray[np.float64],
@@ -129,33 +90,77 @@ def _measure_patch_similarity_numba(
     Compute NSIM similarity — returns
     ``(mean_similarity, freq_band_means, freq_band_stddevs, freq_band_deg_energy)``.
 
-    Pure-numeric kernel; no Python objects so Numba can compile it.
+    Fused kernel: the 5 separate 2-D convolutions (μ_r, μ_d, ref², deg²,
+    ref·deg) and the intensity/structure recombination are merged into a
+    single (r, c) double loop. Each patch element is read from L1 once per
+    visit instead of five times, and there are no intermediate (rows×cols)
+    matrices held in memory between the convs.
+
+    Bit-exact with the split-conv path: per-output accumulators are summed
+    in the same (kr, kc) order over the same per-neighbour products
+    ``w·ref``, ``w·(ref·ref)``, ``w·(deg·deg)``, ``w·(ref·deg)`` that
+    NumPy's elementwise products + the original conv loop produced, so
+    IEEE-754 results match to the last ULP.
     """
-    mu_r = _conv2d_boundary_valid(gw, ref_patch)
-    mu_d = _conv2d_boundary_valid(gw, deg_patch)
-
-    ref_mu_sq = mu_r * mu_r
-    deg_mu_sq = mu_d * mu_d
-    mu_r_mu_d = mu_r * mu_d
-
-    sigma_r_sq = _conv2d_boundary_valid(gw, ref_patch * ref_patch) - ref_mu_sq
-    sigma_d_sq = _conv2d_boundary_valid(gw, deg_patch * deg_patch) - deg_mu_sq
-    sigma_r_d = _conv2d_boundary_valid(gw, ref_patch * deg_patch) - mu_r_mu_d
-
-    # Intensity component
-    intensity = (2.0 * mu_r_mu_d + c1) / (ref_mu_sq + deg_mu_sq + c1)
-
-    # Structure component
     rows, cols = ref_patch.shape
-    structure = np.empty((rows, cols), dtype=np.float64)
+    kh, kw = gw.shape
+    pad_h = kh // 2
+    pad_w = kw // 2
+
+    sim_map = np.empty((rows, cols), dtype=np.float64)
+
     for r in range(rows):
         for c in range(cols):
-            numer = sigma_r_d[r, c] + c3
-            vp = sigma_r_sq[r, c] * sigma_d_sq[r, c]
-            denom = c3 if vp < 0.0 else np.sqrt(vp) + c3
-            structure[r, c] = numer / denom
+            sum_ref = 0.0
+            sum_deg = 0.0
+            sum_ref_sq = 0.0
+            sum_deg_sq = 0.0
+            sum_ref_deg = 0.0
+            for kr in range(kh):
+                for kc in range(kw):
+                    ir = r + kr - pad_h
+                    ic = c + kc - pad_w
+                    if ir < 0:
+                        ir = 0
+                    elif ir >= rows:
+                        ir = rows - 1
+                    if ic < 0:
+                        ic = 0
+                    elif ic >= cols:
+                        ic = cols - 1
+                    w = gw[kr, kc]
+                    ref_v = ref_patch[ir, ic]
+                    deg_v = deg_patch[ir, ic]
+                    # Element-wise products first, then weight — matches the
+                    # NumPy `ref_patch * ref_patch` -> conv ordering used by
+                    # the pre-fusion path so each ULP of rounding is identical.
+                    ref_sq = ref_v * ref_v
+                    deg_sq = deg_v * deg_v
+                    ref_deg_v = ref_v * deg_v
+                    sum_ref += w * ref_v
+                    sum_deg += w * deg_v
+                    sum_ref_sq += w * ref_sq
+                    sum_deg_sq += w * deg_sq
+                    sum_ref_deg += w * ref_deg_v
 
-    sim_map = intensity * structure
+            mu_r = sum_ref
+            mu_d = sum_deg
+            ref_mu_sq = mu_r * mu_r
+            deg_mu_sq = mu_d * mu_d
+            mu_r_mu_d = mu_r * mu_d
+
+            sigma_r_sq = sum_ref_sq - ref_mu_sq
+            sigma_d_sq = sum_deg_sq - deg_mu_sq
+            sigma_r_d = sum_ref_deg - mu_r_mu_d
+
+            intensity = (2.0 * mu_r_mu_d + c1) / (ref_mu_sq + deg_mu_sq + c1)
+
+            numer = sigma_r_d + c3
+            vp = sigma_r_sq * sigma_d_sq
+            denom = c3 if vp < 0.0 else np.sqrt(vp) + c3
+            structure = numer / denom
+
+            sim_map[r, c] = intensity * structure
 
     # Per-band statistics
     num_bands = rows
