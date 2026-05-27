@@ -6,8 +6,8 @@ Corresponds to C++ files: envelope.cc, xcorr.cc, misc_math.cc
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 import numpy as np
 import scipy.fft
@@ -30,7 +30,7 @@ try:
     pyfftw.interfaces.cache.set_keepalive_time(60.0)
     _HAS_PYFFTW = True
 except ImportError:
-    _pyfftw_scipy_fft = None  # type: ignore[assignment]
+    _pyfftw_scipy_fft = None  # type: ignore[assignment,unused-ignore]
     _HAS_PYFFTW = False
 
 

@@ -21,7 +21,8 @@ ViSQOL compares a reference audio signal with a degraded version and outputs a *
   - **Polynomial (fallback)** — legacy exponential fit (`--use_lattice_model=false` in C++)
 - **Pure Python**: no C/C++ compilation required (the optional `[lattice]` extra adds the Google `ai-edge-litert` TFLite runtime as a binary wheel)
 - **Minimal dependencies**: 4 core pip packages (`numpy`, `scipy`, `soundfile`, `libsvm-official`)
-- **Optional Numba acceleration**: `pip install visqol-python[accel]` for JIT-compiled Gammatone filterbank (parallel + fastmath) and DP patch matching — **9× overall speedup**, RTF 0.064 (surpasses C++ estimates)
+- **Optional Numba acceleration**: `pip install visqol-python[accel]` for JIT-compiled Gammatone filterbank (parallel) and a fused NSIM + DP patch matching kernel
+- **Optional pyFFTW backend**: `pip install visqol-python[fftw]` routes alignment / xcorr FFTs through FFTW3 — **~16× overall speedup**, RTF 0.036 (vs C++ estimate 0.093)
 - **Batch & parallel evaluation**: `measure_batch(parallel=True)` for multi-process execution across CPU cores
 - **Fully typed**: PEP 561 `py.typed`, strict mypy, ruff-enforced code style
 
@@ -37,13 +38,19 @@ For **C++-default-equivalent speech mode** (deep-lattice TFLite mapper):
 pip install visqol-python[lattice]   # requires Python ≥ 3.10
 ```
 
-For **Numba-accelerated** Gammatone filtering and DP matching (~9× faster):
+For **Numba-accelerated** Gammatone filtering and the fused NSIM + DP kernel:
 
 ```bash
 pip install visqol-python[accel]
 ```
 
-Install everything (lattice + numba):
+For **FFTW3-backed alignment FFTs** via pyFFTW:
+
+```bash
+pip install visqol-python[fftw]
+```
+
+Install everything (lattice + numba + fftw):
 
 ```bash
 pip install visqol-python[all]
@@ -186,23 +193,26 @@ The `measure()` method returns a `SimilarityResult` object with:
 
 ## Performance
 
-Measured on Apple M-series, Python 3.13:
+Measured on Apple M-series, Python 3.13, audio mode on the `guitar48_stereo` 12.5 s conformance case (3-run average):
 
-### Without Numba (pure Python + NumPy/SciPy)
-
-| Mode | Avg RTF | Typical Time |
-|------|---------|-------------|
-| Audio (48 kHz) | **0.18x** | ~2.2 s per file pair |
-| Speech (16 kHz) | **0.38x** | ~1 s per file pair |
-
-### With Numba (`pip install visqol-python[accel]`)
-
-| Mode | Avg RTF | Typical Time | Speedup |
-|------|---------|-------------|---------|
-| Audio (48 kHz) | **0.064x** | ~0.8 s per file pair | **9×** |
+| Configuration | RTF | Typical Time | Speedup vs pure Python |
+|---|---|---|---|
+| Pure Python + NumPy/SciPy | 0.58 | ~7 s | 1.0× |
+| + `[accel]` (Numba JIT) | 0.067 | ~0.84 s | 8.7× |
+| + `[accel] [fftw]` (Numba + FFTW3) | **0.036** | **~0.45 s** | **16×** |
 
 > RTF (Real-Time Factor) < 1.0 means faster than real-time.
-> With Numba acceleration, the Python implementation **surpasses C++ estimated performance** (RTF ≈ 0.093).
+> With Numba + pyFFTW the Python implementation runs at **2.6× the C++ estimated speed** (C++ RTF ≈ 0.093).
+
+Stage-level breakdown of the v3.6.0 fully-accelerated path:
+
+| Stage | Time | % |
+|---|---|---|
+| Gammatone filterbank | 0.179 s | 40% |
+| DP Patch matching (fused NSIM kernel) | 0.131 s | 29% |
+| Global alignment (pyFFTW rfft/irfft) | 0.091 s | 20% |
+| Fine alignment + NSIM | 0.043 s | 10% |
+| Other (SPL, postproc, SVR, …) | 0.003 s | < 1% |
 
 ## Project Structure
 

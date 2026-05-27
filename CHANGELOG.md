@@ -4,6 +4,69 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.6.0] - 2026-05-27
+
+### Added
+- **Optional pyFFTW backend** (`pip install visqol-python[fftw]`):
+  - Routes `scipy.fft.fft / ifft / rfft / irfft` through FFTW3 via
+    `pyfftw.interfaces.scipy_fft` for the alignment and cross-correlation
+    FFTs. Detected at module load time in `signal_utils` and applied
+    transparently via a thin `_fft_backend()` context manager.
+  - Plan cache enabled with 60 s keep-alive so consecutive measurements
+    on equal-length signals reuse the FFTW plan.
+
+### Improved
+- **Fused NSIM kernel**: `_measure_patch_similarity_numba` merged its 5
+  separate 2-D convolutions (μ_r, μ_d, ref², deg², ref·deg) and the
+  intensity/structure recombination into one `(r, c)` double loop. Each
+  patch element is read from L1 once per visit instead of five times,
+  and the four intermediate `(rows × cols)` matrices are no longer
+  materialised between convs. Bit-exact with the previous split-conv
+  path (ULP-level FP rounding only).
+- **`nsim.measure_patch_similarity`** now dispatches to the fused JIT
+  kernel when Numba is available — the same code path the DP patch
+  matcher uses, so `finely_align_and_recreate_patches` shares the
+  speedup. The pure-NumPy implementation is preserved as a fallback.
+- **`signal_utils._hilbert`** is a drop-in `scipy.signal.hilbert`
+  replacement built on `rfft` for the real-valued input (~2× less
+  forward-transform work than the original full complex `fft`).
+- **`signal_utils.find_best_lag`** now uses `rfft + irfft` for the
+  cross-correlation, again exploiting the real input. Net effect:
+  alignment FFTs see roughly 2× less work overall.
+- Removed dead helper `_conv2d_boundary_valid` from `numba_accel.py`
+  (subsumed by the fused kernel).
+
+### Fixed
+- **`find_best_lag` interpreter hot loop**: the previous implementation
+  ran `xcorr_full[-max_lag:].tolist() + xcorr_full[:max_lag+1].tolist()`
+  and then `builtin argmax(list)` over a ~1.2 M-element Python list,
+  costing ~33 ms per call in pure interpreter overhead. Now uses
+  `np.concatenate + np.argmax` entirely in C.
+
+### Performance
+
+Apple M-series, Python 3.13, audio mode, the `guitar48_stereo` 12.5 s
+conformance case, average of 3 runs with Numba + pyFFTW both installed:
+
+| Stage              | v3.5.0   | v3.6.0   | Speedup |
+|--------------------|----------|----------|---------|
+| DP Patch matching  | 0.397 s  | 0.131 s  | **3.0×** |
+| Global align / FFT | 0.173 s  | 0.091 s  | 1.9×    |
+| Fine align + NSIM  | 0.093 s  | 0.043 s  | 2.2×    |
+| Gammatone          | 0.173 s  | 0.179 s  | ~       |
+| **Total**          | **0.839 s** | **0.447 s** | **1.9×** |
+| **RTF**            | 0.067    | **0.036**   | (C++ est. 0.093) |
+
+### Numerical parity
+
+All v3.5.0 conformance baselines preserved within ULP precision:
+
+| Test                          | Max MOS diff vs v3.5.0 |
+|-------------------------------|------------------------|
+| Audio (10 conformance cases)  | < 5 × 10⁻¹⁴            |
+| Speech polynomial CA01        | 0.0 (bit-exact)        |
+| Speech lattice CA01           | 0.0 (bit-exact)        |
+
 ## [3.5.0] - 2026-05-26
 
 ### Added
@@ -155,6 +218,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Bundled SVR model (`libsvm_nu_svr_model.txt`)
 - GitHub Actions workflow for auto-publish to PyPI via Trusted Publisher
 
+[3.6.0]: https://github.com/talker93/visqol-python/compare/v3.5.0...v3.6.0
 [3.5.0]: https://github.com/talker93/visqol-python/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/talker93/visqol-python/compare/v3.3.6...v3.4.0
 [3.3.6]: https://github.com/talker93/visqol-python/compare/v3.3.5...v3.3.6
