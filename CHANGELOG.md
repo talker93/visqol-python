@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.7.0] - 2026-05-30
 
 ### Fixed
 - **Audio-mode C++ parity in fine realignment** (`finely_align_and_recreate_patches`):
@@ -33,11 +33,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `lag == 0`), so it no longer benefits from the zero-lag skip. Net effect is
   roughly **1.4–1.5× slower realignment** (e.g. `guitar48_stereo` 0.44 s → 0.65 s
   end-to-end with Numba + pyFFTW). This is the cost of exact C++ parity and is
-  consistent with the project's precision-first policy.
+  consistent with the project's precision-first policy. Audio-mode RTF rises
+  from ~0.036 (3.6.0) to ~0.054 — still ~1.7× faster than the C++ binary
+  (~0.093) and faster than 3.5.0 (~0.067).
 
 ### Changed
 - **Dropped Python 3.9 support** (`requires-python = ">=3.10"`). Downstream
-  projects still on 3.9 should pin `visqol-python<next`.
+  projects still on 3.9 should pin `visqol-python<3.7`.
 - CI: bumped GitHub Actions to Node-24-compatible major versions
   (checkout v5, setup-python v6, upload/download-artifact v5).
 
@@ -255,6 +257,7 @@ All v3.5.0 conformance baselines preserved within ULP precision:
 - Bundled SVR model (`libsvm_nu_svr_model.txt`)
 - GitHub Actions workflow for auto-publish to PyPI via Trusted Publisher
 
+[3.7.0]: https://github.com/talker93/visqol-python/compare/v3.6.0...v3.7.0
 [3.6.0]: https://github.com/talker93/visqol-python/compare/v3.5.0...v3.6.0
 [3.5.0]: https://github.com/talker93/visqol-python/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/talker93/visqol-python/compare/v3.3.6...v3.4.0
