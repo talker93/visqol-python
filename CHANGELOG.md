@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **Audio-mode C++ parity in fine realignment** (`finely_align_and_recreate_patches`):
+  the previous "B2 optimisation" skipped the per-patch spectrogram rebuild
+  whenever the fine-alignment lag was zero, on the assumption that the rebuilt
+  spectrogram would be identical to the original patch. That assumption is
+  wrong. The original patch is sliced out of the **full-signal** Gammatone
+  spectrogram (warm IIR filter state, carrying history), whereas the rebuild
+  runs Gammatone over the **sliced** audio from a cold filter state — so the
+  leading frames differ even when no shift is applied. C++ ViSQOL always
+  rebuilds and keeps whichever scores higher, so skipping it silently dropped
+  that improvement. The skip is removed; every matched patch is now rebuilt and
+  compared, exactly as C++ does.
+  - **Impact:** audio MOS-LQO now matches the C++ binary to ULP. Max diff over
+    the 10 conformance cases dropped from **2.41 × 10⁻² → 1.17 × 10⁻⁴**; 9 of 10
+    cases are bit-exact (~10⁻¹⁴). The lone residual (`contrabassoon_24aac`,
+    1.17 × 10⁻⁴) is an unrelated sub-sample boundary-patch alignment rounding,
+    now smaller than the speech-mode parity gap.
+  - Existing audio scores shift by up to ~0.024 MOS where they were previously
+    too low; this is a move **toward** the C++ ground truth, not away from it.
+  - Speech polynomial and lattice scores are unaffected (bit-identical before
+    and after).
+
+### Performance
+- Fine realignment now rebuilds the spectrogram for every patch (including
+  `lag == 0`), so it no longer benefits from the zero-lag skip. Net effect is
+  roughly **1.4–1.5× slower realignment** (e.g. `guitar48_stereo` 0.44 s → 0.65 s
+  end-to-end with Numba + pyFFTW). This is the cost of exact C++ parity and is
+  consistent with the project's precision-first policy.
+
+### Changed
+- **Dropped Python 3.9 support** (`requires-python = ">=3.10"`). Downstream
+  projects still on 3.9 should pin `visqol-python<next`.
+- CI: bumped GitHub Actions to Node-24-compatible major versions
+  (checkout v5, setup-python v6, upload/download-artifact v5).
+
 ## [3.6.0] - 2026-05-27
 
 ### Added

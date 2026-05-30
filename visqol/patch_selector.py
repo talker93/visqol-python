@@ -469,14 +469,19 @@ def finely_align_and_recreate_patches(
 
     1. Extract audio sub-signals
     2. Re-align at fine granularity
-    3. **If lag == 0, skip spectrogram rebuild** (B2 optimisation)
-    4. Rebuild spectrograms only when alignment changed
-    5. Recompute NSIM
-    6. Keep the better result (original or re-aligned)
+    3. Rebuild spectrograms from the (re)aligned audio slices
+    4. Recompute NSIM
+    5. Keep the better result (original or re-aligned)
 
-    The B2 optimisation avoids redundant Gammatone filtering when the
-    fine alignment produces zero shift — the rebuilt spectrograms would
-    be identical to the originals, so skipping saves **~2-3 s** per file.
+    The rebuild is performed for **every** patch, including those with
+    ``lag == 0``.  This mirrors C++ exactly: the original patch was sliced
+    out of the *full-signal* spectrogram (its Gammatone IIR state is warm,
+    carrying history from earlier samples), whereas the rebuilt patch runs
+    Gammatone over the *sliced* audio from a cold filter state.  The two
+    therefore differ in their leading frames even when no time shift is
+    applied, and C++ keeps whichever scores higher.  Skipping the rebuild
+    on ``lag == 0`` (a former "optimisation") silently dropped this
+    improvement and broke audio-mode C++ parity by up to ~0.024 MOS.
     """
     realigned_results: list[PatchSimilarityResult] = list(sim_results)
 
@@ -506,17 +511,13 @@ def finely_align_and_recreate_patches(
         except Exception:
             continue
 
-        # B2 optimisation: if lag is zero, alignment didn't change anything.
-        # The rebuilt spectrogram would be identical to the original, so the
-        # recomputed NSIM would also be identical — skip the expensive rebuild.
-        if lag == 0.0:
-            continue
-
         # Check we have enough samples
         if len(ref_aligned.data) <= window.size or len(deg_aligned.data) <= window.size:
             continue
 
-        # 3. Rebuild spectrograms (only when lag != 0)
+        # 3. Rebuild spectrograms from the aligned slices (always — see docstring:
+        #    cold vs warm Gammatone state makes this differ from the original
+        #    patch even when lag == 0, so it is not a redundant recompute).
         try:
             ref_spec = spect_builder.build(ref_aligned, window)
             deg_spec = spect_builder.build(deg_aligned, window)
