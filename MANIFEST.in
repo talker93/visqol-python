@@ -3,3 +3,10 @@ include LICENSE
 include CHANGELOG.md
 include CONTRIBUTING.md
 recursive-include visqol/model *.txt
+recursive-include docs *.md *.json
+include tests/_*.py
+include tests/conftest.py
+include tests/test_*.py
+include tests/bench_portable.py
+include tests/fetch_conformance_data.py
+include tests/conformance_files.json

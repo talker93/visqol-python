@@ -96,6 +96,22 @@ Raw timings, dependency versions, source checksum and exact-comparison status:
 Run commands from the repository root. Use a separate environment so the
 validation dependencies do not replace those of an existing evaluation job.
 
+On a fresh macOS setup, building `libsvm-official` from source requires an
+OpenMP-capable C++ compiler. Apple Clang does not accept the `-fopenmp` flag in
+[libsvm's build configuration](https://github.com/cjlin1/libsvm/blob/master/python/setup.py).
+The CI workflow uses Homebrew LLVM/libomp and targets the native architecture;
+if this dependency is not already installed, prepare the same toolchain before
+running the pip commands below:
+
+```bash
+brew install llvm libomp
+export CC="$(brew --prefix llvm)/bin/clang"
+export CXX="$(brew --prefix llvm)/bin/clang++"
+export ARCHFLAGS="-arch $(uname -m)"
+export CPPFLAGS="-I$(brew --prefix libomp)/include"
+export LDFLAGS="-L$(brew --prefix libomp)/lib -Wl,-rpath,$(brew --prefix libomp)/lib"
+```
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -131,8 +147,9 @@ The existing Linux Python/NumPy matrix also exercises the unaccelerated fallback
 
 ## Windows handoff (PowerShell, x86-64)
 
-Use 64-bit Python 3.12 and an installed Git client. Start in a directory suitable
-for a fresh checkout:
+Use 64-bit Python 3.12 and an installed Git client. If pip needs to compile
+`libsvm-official`, install Visual Studio Build Tools with its C++ workload.
+Start in a directory suitable for a fresh checkout:
 
 ```powershell
 git clone --branch perf/portable-cpu-kernels https://github.com/talker93/visqol-python.git

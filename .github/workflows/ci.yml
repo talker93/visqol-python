@@ -77,18 +77,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Resolve dependencies with the NumPy constraint
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[test]"
-
-      - name: Pin NumPy version
-        run: |
           if [ "${{ matrix.numpy-version }}" = "1.x" ]; then
-            pip install "numpy>=1.20,<2"
+            python -m pip install -e ".[test]" "numpy>=1.20,<2"
           else
-            pip install "numpy>=2.0"
+            python -m pip install -e ".[test]" "numpy>=2.0"
           fi
+          python -m pip check
 
       - name: Show dependency versions
         run: python -c "import numpy; import scipy; print(f'numpy={numpy.__version__}  scipy={scipy.__version__}')"
@@ -109,6 +106,21 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Prepare OpenMP compiler for libsvm on macOS
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          brew install llvm libomp
+          visqol_llvm_prefix="$(brew --prefix llvm)"
+          visqol_omp_prefix="$(brew --prefix libomp)"
+          cat >> "$GITHUB_ENV" <<EOF
+          CC=$visqol_llvm_prefix/bin/clang
+          CXX=$visqol_llvm_prefix/bin/clang++
+          ARCHFLAGS=-arch $(uname -m)
+          CPPFLAGS=-I$visqol_omp_prefix/include
+          LDFLAGS=-L$visqol_omp_prefix/lib -Wl,-rpath,$visqol_omp_prefix/lib
+          EOF
       - name: Install optional backends and tests
         run: python -m pip install -e ".[test,accel,fftw,lattice]"
       - name: Fetch verified official conformance data

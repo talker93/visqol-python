@@ -119,10 +119,16 @@ module = [
     "svmutil.*",
     "libsvm.*",
     "soundfile.*",
-    "numba.*",
     "ai_edge_litert.*",
     "pyfftw.*",
 ]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["numba"]
+# JIT decorators and prange use compiler semantics, not ordinary Python types.
+# Newer Numba stubs do not describe prange's compiled iteration protocol.
+follow_imports = "skip"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

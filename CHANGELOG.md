@@ -24,9 +24,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   portable, warmed benchmark comparing both implementations on the same machine.
 - Run accelerated conformance/regression tests with both FFT backends on macOS
   and Linux in CI. Fix the Python/NumPy matrix's unsupported Python 3.13 + NumPy
-  1.x combination and keep standalone benchmarks out of pytest collection.
+  1.x combination, resolve SciPy together with the NumPy constraint, and supply
+  an OpenMP compiler for libsvm on macOS. Keep standalone benchmarks out of
+  pytest collection and handle newer Numba's compiler-specific typing in mypy.
 - Document measurement conditions, precision guarantees, and the Windows
   validation procedure in [Portable CPU optimization](docs/portable-cpu-optimization.md).
+- Include the regression helpers, portable benchmark, data manifest and
+  validation documentation in source distributions; keep wheels package-only.
 
 ## [3.7.0] - 2026-05-30
 
