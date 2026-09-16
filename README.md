@@ -21,8 +21,8 @@ ViSQOL compares a reference audio signal with a degraded version and outputs a *
   - **Polynomial (fallback)** — legacy exponential fit (`--use_lattice_model=false` in C++)
 - **Pure Python**: no C/C++ compilation required (the optional `[lattice]` extra adds the Google `ai-edge-litert` TFLite runtime as a binary wheel)
 - **Minimal dependencies**: 4 core pip packages (`numpy`, `scipy`, `soundfile`, `libsvm-official`)
-- **Optional Numba acceleration**: `pip install visqol-python[accel]` for JIT-compiled Gammatone filterbank (parallel) and a fused NSIM + DP patch matching kernel
-- **Optional pyFFTW backend**: `pip install visqol-python[fftw]` routes alignment / xcorr FFTs through FFTW3 — **~16× overall speedup**, RTF 0.036 (vs C++ estimate 0.093)
+- **Optional Numba acceleration**: `pip install visqol-python[accel]` for JIT-compiled Gammatone filtering and NSIM + DP patch matching, with strict FP64 arithmetic
+- **Optional pyFFTW backend**: `pip install visqol-python[fftw]` routes alignment / xcorr FFTs through FFTW3; see [Performance](#performance) for reproducible measurements
 - **Batch & parallel evaluation**: `measure_batch(parallel=True)` for multi-process execution across CPU cores
 - **Fully typed**: PEP 561 `py.typed`, strict mypy, ruff-enforced code style
 
@@ -193,26 +193,33 @@ The `measure()` method returns a `SimilarityResult` object with:
 
 ## Performance
 
-Measured on Apple M-series, Python 3.13, audio mode on the `guitar48_stereo` 12.5 s conformance case (3-run average):
+The unreleased CPU optimization reuses reference-patch statistics, parallelizes
+independent DP candidates, and fuses the Gammatone filter stages. It retains
+FP64 arithmetic and the full 3.7.0 alignment behavior. Install this source
+checkout with `pip install -e ".[all]"` to evaluate these changes; the published
+3.7.0 package does not contain them.
 
-| Configuration | RTF | Typical Time | Speedup vs pure Python |
-|---|---|---|---|
-| Pure Python + NumPy/SciPy | 0.58 | ~7 s | 1.0× |
-| + `[accel]` (Numba JIT) | 0.067 | ~0.84 s | 8.7× |
-| + `[accel] [fftw]` (Numba + FFTW3) | **0.036** | **~0.45 s** | **16×** |
+Use the portable benchmark to compare optimized and frozen 3.7.0 kernels on
+your own machine, with identical inputs, dependency versions and thread counts:
 
-> RTF (Real-Time Factor) < 1.0 means faster than real-time.
-> With Numba + pyFFTW the Python implementation runs at **2.6× the C++ estimated speed** (C++ RTF ≈ 0.093).
+```bash
+python tests/fetch_conformance_data.py
+python tests/bench_portable.py --threads 4 --repeats 5 --fft fftw
+```
 
-Stage-level breakdown of the v3.6.0 fully-accelerated path:
+The benchmark reports warmed end-to-end compute time (audio I/O and first-use
+JIT compilation excluded), checks every output for exact equality, and records
+dependency versions. See [measured results and platform validation](docs/portable-cpu-optimization.md)
+for macOS/Linux results and Windows instructions. Performance depends on the
+CPU, input duration, FFT backend and thread budget; there is no fixed speedup
+for every workload.
 
-| Stage | Time | % |
-|---|---|---|
-| Gammatone filterbank | 0.179 s | 40% |
-| DP Patch matching (fused NSIM kernel) | 0.131 s | 29% |
-| Global alignment (pyFFTW rfft/irfft) | 0.091 s | 20% |
-| Fine alignment + NSIM | 0.043 s | 10% |
-| Other (SPL, postproc, SVR, …) | 0.003 s | < 1% |
+For process-pool workloads, set `NUMBA_NUM_THREADS` **before importing** ViSQOL
+and budget the total across workers (for example, two workers with four threads
+each). Otherwise each worker can allocate a full-machine thread pool.
+
+Historical v3.6.0 timings are preserved in the [changelog](CHANGELOG.md#360---2026-05-27).
+They predate the 3.7.0 fine-alignment correctness fix and are not current baselines.
 
 ## Project Structure
 

@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Performance
+- Reuse reference-patch NSIM statistics across candidate offsets, replace repeated
+  predecessor scans with prefix maxima, and evaluate independent DP candidates
+  with Numba `prange`. Preserve the existing rightmost-tie rule and reduction order.
+- Fuse the four Gammatone IIR stages and RMS accumulation into one sample loop,
+  eliminating the per-frame bands-by-samples intermediate array.
+- Keep FP64 arithmetic, `fastmath=False`, both alignment stages, default search
+  windows, and the public API unchanged. The changes use portable Numba CPU
+  kernels and work with either SciPy FFT or optional pyFFTW.
+
+### Tests and documentation
+- Add exact comparisons with frozen 3.7.0 kernels: full DP tables/backtraces,
+  Gammatone spectrograms, and every public result field in audio and both speech
+  modes. Exercise one/four threads and process-pool evaluation after warmup.
+- Add a checksum-verified downloader for the official conformance data and a
+  portable, warmed benchmark comparing both implementations on the same machine.
+- Run accelerated conformance/regression tests with both FFT backends on macOS
+  and Linux in CI. Fix the Python/NumPy matrix's unsupported Python 3.13 + NumPy
+  1.x combination and keep standalone benchmarks out of pytest collection.
+- Document measurement conditions, precision guarantees, and the Windows
+  validation procedure in [Portable CPU optimization](docs/portable-cpu-optimization.md).
+
 ## [3.7.0] - 2026-05-30
 
 ### Fixed

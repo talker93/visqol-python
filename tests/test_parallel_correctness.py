@@ -1,96 +1,39 @@
-"""
-Correctness test: verify that the parallel+fastmath Gammatone spectrogram
-produces results consistent with the original serial version.
+"""Exercise the public process-pool API with real work and no external data."""
 
-Approach: run the full ViSQOL pipeline on a known test file and check
-that the MOS score is within expected tolerance.
-"""
+from __future__ import annotations
 
-import os
-import sys
-import time
+import numpy as np
+import soundfile as sf
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VISQOL_ROOT = os.path.dirname(ROOT)
-sys.path.insert(0, ROOT)
+from tests._result_comparison import assert_results_equal
+from visqol import VisqolApi
 
 
-# --- Quick sanity: does the module load without errors? ---
-print("=" * 60)
-print("1) Import & warmup")
-print("=" * 60)
-from visqol import numba_accel
-
-print(f"   _HAS_NUMBA          = {numba_accel._HAS_NUMBA}")
-print(f"   _HAS_NUMBA_PARALLEL = {numba_accel._HAS_NUMBA_PARALLEL}")
-print(f"   NUMBA_THREADING_LAYER = {os.environ.get('NUMBA_THREADING_LAYER', '(not set)')}")
-
-t0 = time.perf_counter()
-numba_accel.warmup()
-t1 = time.perf_counter()
-print(f"   warmup completed in {t1 - t0:.2f}s")
-
-# --- Full pipeline correctness test ---
-print()
-print("=" * 60)
-print("2) Full pipeline MOS score test")
-print("=" * 60)
-
-from visqol.api import VisqolApi
-
-TESTDATA = os.path.join(VISQOL_ROOT, "testdata", "conformance_testdata_subset")
-ref_file = os.path.join(TESTDATA, "guitar48_stereo.wav")
-deg_file = os.path.join(TESTDATA, "guitar48_stereo_64kbps_aac.wav")
-
-if not os.path.exists(ref_file):
-    import glob
-
-    testdata_root = os.path.join(VISQOL_ROOT, "testdata")
-    wavs = sorted(glob.glob(os.path.join(testdata_root, "**", "*.wav"), recursive=True))
-    if len(wavs) >= 2:
-        ref_file = wavs[0]
-        deg_file = wavs[1]
-    else:
-        print("   ERROR: No test WAV files found")
-        sys.exit(1)
-
-print(f"   ref: {os.path.basename(ref_file)}")
-print(f"   deg: {os.path.basename(deg_file)}")
-
-v = VisqolApi()
-v.create(mode="audio")
-
-# Run 1: get score (also triggers JIT compilation if not warmed up)
-t0 = time.perf_counter()
-result1 = v.measure(ref_file, deg_file)
-t1 = time.perf_counter()
-print(f"   Run 1: MOS = {result1.moslqo:.6f}  ({t1 - t0:.3f}s)")
-
-# Run 2: steady-state (JIT cached)
-t0 = time.perf_counter()
-result2 = v.measure(ref_file, deg_file)
-t1 = time.perf_counter()
-print(f"   Run 2: MOS = {result2.moslqo:.6f}  ({t1 - t0:.3f}s)")
-
-# Check reproducibility
-diff = abs(result1.moslqo - result2.moslqo)
-print(f"   Run1 vs Run2 diff: {diff:.2e}")
-assert diff < 1e-10, f"Non-reproducible results: diff={diff}"
-print("   ✅ Results are reproducible across runs")
-
-# Check MOS is in a reasonable range
-print(f"   MOS value: {result1.moslqo:.6f}")
-assert 1.0 <= result1.moslqo <= 5.0, f"MOS out of range: {result1.moslqo}"
-print("   ✅ MOS in valid range [1, 5]")
-
-# Run 3: timing
-t0 = time.perf_counter()
-result3 = v.measure(ref_file, deg_file)
-t1 = time.perf_counter()
-print(f"   Run 3: MOS = {result3.moslqo:.6f}  ({t1 - t0:.3f}s)")
-
-print()
-print("=" * 60)
-print("ALL CORRECTNESS CHECKS PASSED ✅")
-print(f"Steady-state latency: {t1 - t0:.3f}s")
-print("=" * 60)
+def test_process_pool_matches_sequential_after_warmup(tmp_path):
+    # Warm the parent first, also exercising a pool after Numba initialization.
+    sr = 16000
+    rng = np.random.default_rng(817)
+    t = np.arange(2 * sr) / sr
+    ref = 0.3 * np.sin(2 * np.pi * 440 * t) + 0.05 * rng.standard_normal(len(t))
+    pairs = []
+    for index, noise in enumerate([0.01, 0.1]):
+        ref_path = tmp_path / f"ref_{index}.wav"
+        deg_path = tmp_path / f"deg_{index}.wav"
+        sf.write(ref_path, ref, sr, subtype="PCM_16")
+        sf.write(deg_path, ref + noise * rng.standard_normal(len(t)), sr, subtype="PCM_16")
+        pairs.append((str(ref_path), str(deg_path)))
+    api = VisqolApi()
+    api.create(mode="speech", use_lattice_model=False)
+    expected = api.measure_batch(pairs, parallel=False)
+    progress = []
+    actual = api.measure_batch(
+        pairs,
+        parallel=True,
+        max_workers=2,
+        progress_callback=lambda done, total: progress.append((done, total)),
+    )
+    assert progress == [(1, 2), (2, 2)]
+    for left, right in zip(actual, expected, strict=True):
+        assert not isinstance(left, Exception), str(left)
+        assert not isinstance(right, Exception), str(right)
+        assert_results_equal(left, right)

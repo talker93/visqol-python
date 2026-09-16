@@ -37,6 +37,12 @@ pytest tests/test_quick.py -v
 pytest tests/test_conformance.py -v --testdata /path/to/visqol/testdata
 ```
 
+For accelerated changes, install `pip install -e ".[dev]"`, fetch the pinned
+official data with `python tests/fetch_conformance_data.py`, and follow the
+[macOS/Linux and Windows regression procedure](docs/portable-cpu-optimization.md).
+It compares every public output with the frozen 3.7.0 kernels using both FFT
+backends, including speech lattice and process-pool evaluation.
+
 ## Code Style
 
 - **Type hints**: All public functions and methods must include type annotations.

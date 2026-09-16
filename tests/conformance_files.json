@@ -1,0 +1,111 @@
+{
+  "repository": "https://github.com/google/visqol",
+  "commit": "c3aa2e498e0f7f14202643594335a0b9ee40bdd9",
+  "files": [
+    {
+      "path": "clean_speech/CA01_01.wav",
+      "sha": "df4df56248ef66eb92b35fb9feea1e3af1a74ab9",
+      "size": 263334
+    },
+    {
+      "path": "clean_speech/transcoded_CA01_01.wav",
+      "sha": "a15cbadbdf6f5588b907130e57fef77afa025695",
+      "size": 262932
+    },
+    {
+      "path": "conformance_testdata_subset/castanets48_stereo.wav",
+      "sha": "c84ad0751243eddbc2b7982e455922a90c12afb5",
+      "size": 1397712
+    },
+    {
+      "path": "conformance_testdata_subset/contrabassoon48_stereo.wav",
+      "sha": "c95763ed4e32f683d75dcfebce12598feb1a614c",
+      "size": 3092954
+    },
+    {
+      "path": "conformance_testdata_subset/contrabassoon48_stereo_24kbps_aac.wav",
+      "sha": "f4e3dd2bc09197e5e5b789851cfdae98020ee216",
+      "size": 3113040
+    },
+    {
+      "path": "conformance_testdata_subset/glock48_stereo.wav",
+      "sha": "061e8bb317d5deb33e49dfabb0150439dfd199aa",
+      "size": 2330056
+    },
+    {
+      "path": "conformance_testdata_subset/glock48_stereo_48kbps_aac.wav",
+      "sha": "393b3a3760d16cb9d31a3d5d4c60cb0692ea0382",
+      "size": 2351184
+    },
+    {
+      "path": "conformance_testdata_subset/guitar48_stereo.wav",
+      "sha": "392986389872003030132799de7531c8ee95a865",
+      "size": 2391312
+    },
+    {
+      "path": "conformance_testdata_subset/guitar48_stereo_64kbps_aac.wav",
+      "sha": "893ee66f716496497942fc775d9051c10c12e451",
+      "size": 2408528
+    },
+    {
+      "path": "conformance_testdata_subset/harpsichord48_stereo.wav",
+      "sha": "2b64cf2d4d13313fe0bdd6e207d0a870af8cb2e3",
+      "size": 2803800
+    },
+    {
+      "path": "conformance_testdata_subset/harpsichord48_stereo_96kbps_mp3.wav",
+      "sha": "3e7c1a44d499813b8bcaacb5faf313d3bf06cf90",
+      "size": 2806352
+    },
+    {
+      "path": "conformance_testdata_subset/moonlight48_stereo.wav",
+      "sha": "cfb78e0200af85e988467a683045281e359003d5",
+      "size": 2688012
+    },
+    {
+      "path": "conformance_testdata_subset/moonlight48_stereo_128kbps_aac.wav",
+      "sha": "b586dbe980cc29313d4819a4ead7843bc9d5442b",
+      "size": 2695248
+    },
+    {
+      "path": "conformance_testdata_subset/ravel48_stereo.wav",
+      "sha": "857c0b560dc35b881d3e30150192fefbaf1ef6e5",
+      "size": 2787848
+    },
+    {
+      "path": "conformance_testdata_subset/ravel48_stereo_128kbps_opus.wav",
+      "sha": "67f848240bf4e0403aea7f833f7f6c67cfa864ca",
+      "size": 2790512
+    },
+    {
+      "path": "conformance_testdata_subset/sopr48_stereo.wav",
+      "sha": "05fc176e318b2ec24ee830db7e2282cc444db975",
+      "size": 2120424
+    },
+    {
+      "path": "conformance_testdata_subset/sopr48_stereo_256kbps_aac.wav",
+      "sha": "c93f64e6645f7065603eac5735422fdf1fa7534e",
+      "size": 2130000
+    },
+    {
+      "path": "conformance_testdata_subset/steely48_stereo.wav",
+      "sha": "c35afadad12012d5682b7d821af1cecce2bb2be0",
+      "size": 2605884
+    },
+    {
+      "path": "conformance_testdata_subset/steely48_stereo_lp7.wav",
+      "sha": "753b8f2df06ed57cece85f1fa85e61aabc3fda05",
+      "size": 2611250
+    },
+    {
+      "path": "conformance_testdata_subset/strauss48_stereo.wav",
+      "sha": "cbb46d989d9d7165e494128c60eab1594ecfedeb",
+      "size": 2808752
+    },
+    {
+      "path": "conformance_testdata_subset/strauss48_stereo_lp35.wav",
+      "sha": "a121eed976c40f3eb5b78b6b265cce4c24386a95",
+      "size": 2814600
+    }
+  ]
+}

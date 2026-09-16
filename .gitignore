@@ -34,3 +34,7 @@ Thumbs.db
 
 # Project
 .codebuddy/
+.testdata/
+test-results/
+*.nbc
+*.nbi

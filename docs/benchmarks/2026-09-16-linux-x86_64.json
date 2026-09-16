@@ -1,0 +1,45 @@
+{
+  "baseline_commit": "1c3953ec4b6ed2e7fa2a2ce56eab3bad648d98d4",
+  "kernel_sha256": "dc39818c9518f8686b0cfd5711739ad28d14ac6de3921675767b91e3f5433071",
+  "platform": "Linux-5.4.241-1-tlinux4-0017.14-x86_64-with-glibc2.35",
+  "architecture": "x86_64",
+  "python": "3.10.20",
+  "versions": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "numba": "0.65.1",
+    "llvmlite": "0.47.0",
+    "pyfftw": "0.15.0",
+    "ai-edge-litert": "2.2.0"
+  },
+  "threads": 4,
+  "threading_layer": "workqueue",
+  "fft_backend": "fftw",
+  "repeats": 5,
+  "case": "official guitar48_stereo_64kbps_aac",
+  "duration_sec": 12.453833333333334,
+  "protocol": "audio, FP64, search_window=60, both alignments enabled; warmed; excludes audio I/O",
+  "seconds": {
+    "optimized": [
+      0.5394072169438004,
+      0.5373025466687977,
+      0.5457052960991859,
+      0.5398548180237412,
+      0.5398879866115749
+    ],
+    "legacy_3_7_0": [
+      1.4971719882450998,
+      1.5210356987081468,
+      1.5065979771316051,
+      1.5096658081747591,
+      1.5108016063459218
+    ]
+  },
+  "median_sec": {
+    "optimized": 0.5398548180237412,
+    "legacy_3_7_0": 1.5096658081747591
+  },
+  "speedup": 2.7964292579646264,
+  "moslqo": 4.349722308064309,
+  "all_outputs_exact": true
+}

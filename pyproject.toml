@@ -70,6 +70,7 @@ visqol = "visqol.__main__:main"
 version = {attr = "visqol.__version__"}
 
 [tool.setuptools.packages.find]
+include = ["visqol*"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
@@ -77,6 +78,7 @@ visqol = ["model/*.txt", "model/*.tflite", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py"]
 
 [tool.ruff]
 target-version = "py310"

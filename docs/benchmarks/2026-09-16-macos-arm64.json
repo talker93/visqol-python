@@ -1,0 +1,45 @@
+{
+  "baseline_commit": "1c3953ec4b6ed2e7fa2a2ce56eab3bad648d98d4",
+  "kernel_sha256": "dc39818c9518f8686b0cfd5711739ad28d14ac6de3921675767b91e3f5433071",
+  "platform": "macOS-15.7.3-arm64-arm-64bit-Mach-O",
+  "architecture": "arm64",
+  "python": "3.13.2",
+  "versions": {
+    "numpy": "2.4.3",
+    "scipy": "1.17.1",
+    "numba": "0.65.1",
+    "llvmlite": "0.47.0",
+    "pyfftw": "0.15.0",
+    "ai-edge-litert": "2.2.0"
+  },
+  "threads": 4,
+  "threading_layer": "workqueue",
+  "fft_backend": "fftw",
+  "repeats": 5,
+  "case": "official guitar48_stereo_64kbps_aac",
+  "duration_sec": 12.453833333333334,
+  "protocol": "audio, FP64, search_window=60, both alignments enabled; warmed; excludes audio I/O",
+  "seconds": {
+    "optimized": [
+      0.40294154200091725,
+      0.4215942089977034,
+      0.40989537499990547,
+      0.4250234579994867,
+      0.42086304199983715
+    ],
+    "legacy_3_7_0": [
+      1.0646232920007606,
+      1.0958797089988366,
+      1.092644124997605,
+      1.0716607499998645,
+      1.0800574999993842
+    ]
+  },
+  "median_sec": {
+    "optimized": 0.42086304199983715,
+    "legacy_3_7_0": 1.0800574999993842
+  },
+  "speedup": 2.566292100316573,
+  "moslqo": 4.349722308064313,
+  "all_outputs_exact": true
+}

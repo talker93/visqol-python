@@ -39,7 +39,7 @@ try:
 
     _HAS_NUMBA = True
     _HAS_NUMBA_PARALLEL = True
-    logger.debug("numba detected — JIT acceleration enabled (parallel+fastmath).")
+    logger.debug("numba detected — JIT acceleration enabled (parallel, strict FP64).")
 except ImportError:
     # Provide no-op decorator so the rest of the module works unmodified.
     def njit(*args, **kwargs):  # type: ignore[misc]
@@ -203,10 +203,109 @@ def _measure_patch_similarity_numba(
 
 
 @njit(cache=True)
+def _reference_local_stats(
+    ref_patch: NDArray[np.float64],
+    gw: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Compute the reference-only NSIM terms once per reference patch."""
+    rows, cols = ref_patch.shape
+    kh, kw = gw.shape
+    pad_h = kh // 2
+    pad_w = kw // 2
+    mu_r = np.empty((rows, cols), dtype=np.float64)
+    sigma_r_sq = np.empty((rows, cols), dtype=np.float64)
+
+    for row in range(rows):
+        for col in range(cols):
+            mean_sum = 0.0
+            square_sum = 0.0
+            for kernel_row in range(kh):
+                source_row = row + kernel_row - pad_h
+                if source_row < 0:
+                    source_row = 0
+                elif source_row >= rows:
+                    source_row = rows - 1
+                for kernel_col in range(kw):
+                    source_col = col + kernel_col - pad_w
+                    if source_col < 0:
+                        source_col = 0
+                    elif source_col >= cols:
+                        source_col = cols - 1
+                    weight = gw[kernel_row, kernel_col]
+                    value = ref_patch[source_row, source_col]
+                    mean_sum += weight * value
+                    square_sum += weight * (value * value)
+            mu_r[row, col] = mean_sum
+            sigma_r_sq[row, col] = square_sum - mean_sum * mean_sum
+
+    return mu_r, sigma_r_sq
+
+
+@njit(cache=True)
+def _mean_patch_similarity_with_ref_stats(
+    ref_patch: NDArray[np.float64],
+    deg_patch: NDArray[np.float64],
+    mu_r: NDArray[np.float64],
+    sigma_r_sq: NDArray[np.float64],
+    gw: NDArray[np.float64],
+    c1: float,
+    c3: float,
+) -> float:
+    """Return mean NSIM using cached reference terms and legacy reduction order."""
+    rows, cols = ref_patch.shape
+    kh, kw = gw.shape
+    pad_h = kh // 2
+    pad_w = kw // 2
+    mean_freq_band_means = 0.0
+
+    for row in range(rows):
+        band_sum = 0.0
+        for col in range(cols):
+            mean_deg = 0.0
+            square_deg = 0.0
+            cross = 0.0
+            for kernel_row in range(kh):
+                source_row = row + kernel_row - pad_h
+                if source_row < 0:
+                    source_row = 0
+                elif source_row >= rows:
+                    source_row = rows - 1
+                for kernel_col in range(kw):
+                    source_col = col + kernel_col - pad_w
+                    if source_col < 0:
+                        source_col = 0
+                    elif source_col >= cols:
+                        source_col = cols - 1
+                    weight = gw[kernel_row, kernel_col]
+                    ref_value = ref_patch[source_row, source_col]
+                    deg_value = deg_patch[source_row, source_col]
+                    mean_deg += weight * deg_value
+                    square_deg += weight * (deg_value * deg_value)
+                    cross += weight * (ref_value * deg_value)
+
+            mean_ref = mu_r[row, col]
+            ref_mean_sq = mean_ref * mean_ref
+            deg_mean_sq = mean_deg * mean_deg
+            mean_cross = mean_ref * mean_deg
+            deg_variance = square_deg - deg_mean_sq
+            covariance = cross - mean_cross
+
+            intensity = (2.0 * mean_cross + c1) / (ref_mean_sq + deg_mean_sq + c1)
+            variance_product = sigma_r_sq[row, col] * deg_variance
+            denominator = c3 if variance_product < 0.0 else np.sqrt(variance_product) + c3
+            structure = (covariance + c3) / denominator
+            band_sum += intensity * structure
+
+        mean_freq_band_means += band_sum / cols
+
+    return float(mean_freq_band_means / rows)
+
+
+@njit(cache=True, parallel=True)
 def _dp_forward_pass(
-    ref_patches: NDArray[np.float64],  # (num_patches, num_bands, num_frames)
-    deg_patches: NDArray[np.float64],  # (num_deg_frames, num_bands, num_frames)
-    ref_patch_indices: NDArray[np.int64],  # (num_patches,)
+    ref_patches: NDArray[np.float64],
+    deg_patches: NDArray[np.float64],
+    ref_patch_indices: NDArray[np.int64],
     num_patches: int,
     num_frames_in_deg: int,
     search_window: int,
@@ -214,57 +313,59 @@ def _dp_forward_pass(
     c1: float,
     c3: float,
 ) -> tuple[NDArray[np.float64], NDArray[np.int64]]:
-    """
-    DP forward pass — fills cumulative similarity table and backtrace table.
+    """Fill cumulative scores and backtrace with the legacy rightmost tie rule.
 
-    Returns ``(cumulative_dp, backtrace)`` both of shape
-    ``(num_ref_patches, num_frames_in_deg)``.
+    Reference indices are ordered, as produced by the patch creators. Both
+    returned arrays have shape (len(ref_patch_indices), num_frames_in_deg).
     """
+    # Candidates are independent after building previous-row prefix maxima.
+    # Preserve strict FP64 arithmetic and the rightmost-tie predecessor.
     num_ref_patches = ref_patch_indices.shape[0]
-
     cumulative_dp = np.zeros((num_ref_patches, num_frames_in_deg), dtype=np.float64)
     backtrace = np.full((num_ref_patches, num_frames_in_deg), -1, dtype=np.int64)
+    prefix_value = np.empty(num_frames_in_deg, dtype=np.float64)
+    prefix_index = np.empty(num_frames_in_deg, dtype=np.int64)
 
     for patch_index in range(num_patches):
         ref_frame_index = ref_patch_indices[patch_index]
-
         low = max(0, ref_frame_index - search_window)
         high = min(num_frames_in_deg - 1, ref_frame_index + search_window)
+        mu_r, sigma_r_sq = _reference_local_stats(ref_patches[patch_index], gw)
 
-        for slide_offset in range(low, high + 1):
-            if slide_offset >= num_frames_in_deg:
-                break
+        if patch_index > 0:
+            lower_limit = max(
+                0,
+                ref_patch_indices[patch_index - 1] - search_window,
+            )
+            highest_sim = -1e308
+            highest_offset = -1
+            for offset in range(lower_limit, high + 1):
+                prefix_value[offset] = highest_sim
+                prefix_index[offset] = highest_offset
+                previous = cumulative_dp[patch_index - 1, offset]
+                # Legacy reverse scan uses >, retaining the rightmost tie.
+                if previous >= highest_sim:
+                    highest_sim = previous
+                    highest_offset = offset
 
-            # Compute NSIM for this (ref_patch, deg_patch) pair
-            sim_val_tuple = _measure_patch_similarity_numba(
+        for slide_offset in prange(low, high + 1):
+            sim_val = _mean_patch_similarity_with_ref_stats(
                 ref_patches[patch_index],
                 deg_patches[slide_offset],
+                mu_r,
+                sigma_r_sq,
                 gw,
                 c1,
                 c3,
             )
-            sim_val = sim_val_tuple[0]
-
             past_slide_offset = -1
-            highest_sim = -1e308  # ~ -inf
 
             if patch_index > 0:
-                lower_limit = max(
-                    0,
-                    ref_patch_indices[patch_index - 1] - search_window,
-                )
-
-                back_offset = slide_offset - 1
-                while back_offset >= lower_limit:
-                    if cumulative_dp[patch_index - 1, back_offset] > highest_sim:
-                        highest_sim = cumulative_dp[patch_index - 1, back_offset]
-                        past_slide_offset = back_offset
-                    back_offset -= 1
-
-                sim_val += highest_sim
-
-                if cumulative_dp[patch_index - 1, slide_offset] > sim_val:
-                    sim_val = cumulative_dp[patch_index - 1, slide_offset]
+                sim_val += prefix_value[slide_offset]
+                past_slide_offset = prefix_index[slide_offset]
+                same_offset = cumulative_dp[patch_index - 1, slide_offset]
+                if same_offset > sim_val:
+                    sim_val = same_offset
                     past_slide_offset = slide_offset
 
             cumulative_dp[patch_index, slide_offset] = sim_val
@@ -479,8 +580,9 @@ def _gammatone_spectrogram_numba(
 
     Processes all frames **in parallel** (``prange`` over frames).  Each
     frame's IIR state is independent (reset to zero), so parallelism is
-    bit-safe.  ``fastmath`` enables FMA and reassociation at the LLVM
-    level (ULP-level deviation only, < 1e-14 relative error).
+    bit-safe. Four IIR stages and RMS accumulation share one sample loop,
+    avoiding the bands-by-samples intermediate array. Each stage keeps the
+    legacy operation order; fastmath is intentionally disabled.
 
     Parameters
     ----------
@@ -506,77 +608,47 @@ def _gammatone_spectrogram_numba(
     out_matrix : (num_bands, num_cols) float64
         RMS-energy spectrogram.
     """
-    out_matrix = np.zeros((num_bands, num_cols), dtype=np.float64)
-
-    # prange parallelises over frames — each frame's IIR filter state is
-    # completely independent (zi = 0), so this is embarrassingly parallel.
+    out = np.zeros((num_bands, num_cols), dtype=np.float64)
     for i in prange(num_cols):
-        start = i * hop_size
-        # Apply Hann window to frame
         frame = np.empty(window_size, dtype=np.float64)
         for j in range(window_size):
-            frame[j] = sig[start + j] * hann_window[j]
-
-        # Apply 4-stage IIR filter for all bands (inlined to avoid
-        # cross-thread function-call overhead in the parallel region)
-        n_samples = window_size
-        num_b = b_stages.shape[1]  # == num_bands
-
-        # Allocate per-thread filtered buffer
-        filtered = np.empty((num_b, n_samples), dtype=np.float64)
-
-        for chan in range(num_b):
-            a1 = a_denom[chan, 1]
-            a2 = a_denom[chan, 2]
-
-            # Stage 1
-            b0 = b_stages[0, chan, 0]
-            b1 = b_stages[0, chan, 1]
-            b2 = b_stages[0, chan, 2]
-            z0 = 0.0
-            z1 = 0.0
-            for k in range(n_samples):
+            frame[j] = sig[i * hop_size + j] * hann_window[j]
+        for chan in range(num_bands):
+            a1, a2 = a_denom[chan, 1], a_denom[chan, 2]
+            b00, b01, b02 = b_stages[0, chan, 0], b_stages[0, chan, 1], b_stages[0, chan, 2]
+            b10, b11, b12 = b_stages[1, chan, 0], b_stages[1, chan, 1], b_stages[1, chan, 2]
+            b20, b21, b22 = b_stages[2, chan, 0], b_stages[2, chan, 1], b_stages[2, chan, 2]
+            b30, b31, b32 = b_stages[3, chan, 0], b_stages[3, chan, 1], b_stages[3, chan, 2]
+            z00, z01, z10, z11, z20, z21, z30, z31 = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+            energy = 0.0
+            for k in range(window_size):
                 x = frame[k]
-                y = b0 * x + z0
-                z0 = b1 * x - a1 * y + z1
-                z1 = b2 * x - a2 * y
-                filtered[chan, k] = y
-
-            # Stages 2, 3, 4
-            for stage in range(1, 4):
-                b0 = b_stages[stage, chan, 0]
-                b1 = b_stages[stage, chan, 1]
-                b2 = b_stages[stage, chan, 2]
-                z0 = 0.0
-                z1 = 0.0
-                for k in range(n_samples):
-                    x = filtered[chan, k]
-                    y = b0 * x + z0
-                    z0 = b1 * x - a1 * y + z1
-                    z1 = b2 * x - a2 * y
-                    filtered[chan, k] = y
-
-        # RMS per band: sqrt(mean(filtered²))
-        for b in range(num_b):
-            s = 0.0
-            for j in range(n_samples):
-                v = filtered[b, j]
-                s += v * v
-            out_matrix[b, i] = np.sqrt(s / n_samples)
-
-    return out_matrix
+                y0 = b00 * x + z00
+                z00 = b01 * x - a1 * y0 + z01
+                z01 = b02 * x - a2 * y0
+                y1 = b10 * y0 + z10
+                z10 = b11 * y0 - a1 * y1 + z11
+                z11 = b12 * y0 - a2 * y1
+                y2 = b20 * y1 + z20
+                z20 = b21 * y1 - a1 * y2 + z21
+                z21 = b22 * y1 - a2 * y2
+                y3 = b30 * y2 + z30
+                z30 = b31 * y2 - a1 * y3 + z31
+                z31 = b32 * y2 - a2 * y3
+                energy += y3 * y3
+            out[chan, i] = np.sqrt(energy / window_size)
+    return out
 
 
 # =====================================================================
-# Warm-up helper — call once at import time (when numba is present) to
-# trigger ahead-of-time compilation so the first real call is fast.
+# Optional warm-up helper — explicitly compile kernels before timing work.
 # =====================================================================
 
 
 def warmup() -> None:
     """Trigger Numba compilation with tiny dummy data (runs once).
 
-    This compiles both the serial helpers and the parallel+fastmath
+    This compiles both the serial helpers and the parallel, strict FP64
     Gammatone spectrogram kernel so that the first real call is fast.
     """
     if not _HAS_NUMBA:

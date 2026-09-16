@@ -12,11 +12,32 @@ You can obtain these from the official ViSQOL repository:
     https://github.com/google/visqol
 """
 
+from __future__ import annotations
+
 import os
 
 import pytest
 
 from visqol import VisqolApi
+from visqol.numba_accel import has_numba
+
+
+def assert_legacy_equivalence(api, ref_path, deg_path, actual, monkeypatch):
+    """Keep all public outputs equal to 3.7.0 on the same machine/backend."""
+    if not has_numba():
+        return
+    from tests._legacy_kernels import legacy_dp_forward_pass, legacy_gammatone_spectrogram
+    from tests._result_comparison import assert_results_equal
+    from visqol import gammatone, patch_selector
+
+    with monkeypatch.context() as context:
+        context.setattr(patch_selector, "_dp_forward_pass", legacy_dp_forward_pass)
+        context.setattr(
+            gammatone, "_gammatone_spectrogram_numba", legacy_gammatone_spectrogram
+        )
+        expected = api.measure(ref_path, deg_path)
+    assert_results_equal(actual, expected)
+
 
 # ── Fixtures ──
 
@@ -142,10 +163,13 @@ SPEECH_LATTICE_CASES = [
     AUDIO_CASES,
     ids=[c[3] for c in AUDIO_CASES],
 )
-def test_audio_conformance(audio_api, conf_dir, ref_name, deg_name, expected_mos, test_id):
+def test_audio_conformance(
+    audio_api, conf_dir, ref_name, deg_name, expected_mos, test_id, monkeypatch
+):
     ref_path = os.path.join(conf_dir, ref_name)
     deg_path = os.path.join(conf_dir, deg_name)
     result = audio_api.measure(ref_path, deg_path)
+    assert_legacy_equivalence(audio_api, ref_path, deg_path, result, monkeypatch)
     diff = abs(result.moslqo - expected_mos)
     assert diff < TOLERANCE, (
         f"[{test_id}] MOS={result.moslqo:.6f}, expected={expected_mos:.6f}, diff={diff:.6f}"
@@ -161,11 +185,12 @@ def test_audio_conformance(audio_api, conf_dir, ref_name, deg_name, expected_mos
     ids=[c[3] for c in SPEECH_POLYNOMIAL_CASES],
 )
 def test_speech_polynomial_conformance(
-    speech_polynomial_api, speech_dir, ref_name, deg_name, expected_mos, test_id
+    speech_polynomial_api, speech_dir, ref_name, deg_name, expected_mos, test_id, monkeypatch
 ):
     ref_path = os.path.join(speech_dir, ref_name)
     deg_path = os.path.join(speech_dir, deg_name)
     result = speech_polynomial_api.measure(ref_path, deg_path)
+    assert_legacy_equivalence(speech_polynomial_api, ref_path, deg_path, result, monkeypatch)
     diff = abs(result.moslqo - expected_mos)
     assert diff < TOLERANCE, (
         f"[{test_id}] MOS={result.moslqo:.6f}, expected={expected_mos:.6f}, diff={diff:.6f}"
@@ -178,11 +203,12 @@ def test_speech_polynomial_conformance(
     ids=[c[3] for c in SPEECH_LATTICE_CASES],
 )
 def test_speech_lattice_conformance(
-    speech_lattice_api, speech_dir, ref_name, deg_name, expected_mos, test_id
+    speech_lattice_api, speech_dir, ref_name, deg_name, expected_mos, test_id, monkeypatch
 ):
     ref_path = os.path.join(speech_dir, ref_name)
     deg_path = os.path.join(speech_dir, deg_name)
     result = speech_lattice_api.measure(ref_path, deg_path)
+    assert_legacy_equivalence(speech_lattice_api, ref_path, deg_path, result, monkeypatch)
     diff = abs(result.moslqo - expected_mos)
     assert diff < TOLERANCE, (
         f"[{test_id}] MOS={result.moslqo:.6f}, expected={expected_mos:.6f}, diff={diff:.6f}"
